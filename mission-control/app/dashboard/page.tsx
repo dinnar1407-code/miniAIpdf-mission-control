@@ -5,15 +5,10 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { AgentStatusMini } from "@/components/dashboard/agent-status-mini";
 import { AlertsPreview } from "@/components/dashboard/alerts-preview";
+import { useEffect, useRef, useState } from "react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar,
 } from "recharts";
 
 const trafficData = Array.from({ length: 14 }, (_, i) => ({
@@ -40,12 +35,25 @@ const projects = [
   { name: "Dinnar", slug: "dinnar", emoji: "🏭", color: "#EF4444" },
 ];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface DashboardStats {
+  openTasks: number;
+  totalTasks: number;
+  activeAgents: number;
+  totalAgents: number;
+  newAlerts: number;
+  mrr?: number;
+  mrrChange?: number;
+  users?: number;
+  usersChange?: number;
+  agentHours?: number;
+}
+
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-[#1A1A24] border border-[#2A2A3A] rounded-lg p-3 text-xs">
         <p className="text-[#8B8B9E] mb-1">{label}</p>
-        {payload.map((p: any) => (
+        {payload.map((p) => (
           <p key={p.name} style={{ color: p.color }}>
             {p.name}: {p.value.toLocaleString()}
           </p>
@@ -57,14 +65,77 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>({
+    openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5,
+    newAlerts: 0, mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8, agentHours: 142,
+  });
+  const [live, setLive] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
+
+  // Load initial data from REST
+  useEffect(() => {
+    fetch("/api/dashboard")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.stats) {
+          setStats(prev => ({ ...prev, ...data.stats }));
+          setLastUpdated(new Date());
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // SSE real-time updates
+  useEffect(() => {
+    const es = new EventSource("/api/sse");
+    sseRef.current = es;
+
+    es.onopen = () => setLive(true);
+    es.onerror = () => setLive(false);
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data) as DashboardStats & { timestamp: string };
+        setStats(prev => ({ ...prev, ...data }));
+        setLastUpdated(new Date(data.timestamp));
+        setLive(true);
+      } catch {}
+    };
+
+    return () => {
+      es.close();
+      setLive(false);
+    };
+  }, []);
+
+  const taskPct = stats.totalTasks > 0
+    ? Math.round((stats.openTasks / stats.totalTasks) * 100)
+    : 0;
+
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title="Mission Control"
-        subtitle="Playfish Universal Platform · All Projects"
+        subtitle={
+          <span className="flex items-center gap-2 text-sm text-[#8B8B9E]">
+            Playfish Universal Platform · All Projects
+            {live && (
+              <span className="flex items-center gap-1 text-green-400 text-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                Live
+              </span>
+            )}
+            {lastUpdated && (
+              <span className="text-xs text-[#5A5A6E]">
+                · Updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+          </span>
+        }
       />
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Project Pills */}
         <div className="flex items-center gap-2 flex-wrap">
           <button className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#3B82F6] text-white">
@@ -81,11 +152,11 @@ export default function DashboardPage() {
         </div>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
           <StatCard
             label="Monthly Revenue"
-            value="$2,327"
-            change="+12%"
+            value={`$${(stats.mrr || 0).toLocaleString()}`}
+            change={`+${stats.mrrChange || 0}%`}
             changeType="up"
             icon="💰"
             color="#10B981"
@@ -93,8 +164,8 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Total Users"
-            value="4,494"
-            change="+8%"
+            value={(stats.users || 0).toLocaleString()}
+            change={`+${stats.usersChange || 0}%`}
             changeType="up"
             icon="👥"
             color="#3B82F6"
@@ -102,8 +173,8 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Open Tasks"
-            value="23/45"
-            change="51%"
+            value={`${stats.openTasks}/${stats.totalTasks}`}
+            change={`${taskPct}%`}
             changeType="neutral"
             icon="📋"
             color="#F59E0B"
@@ -111,16 +182,16 @@ export default function DashboardPage() {
           />
           <StatCard
             label="Active Agents"
-            value="3/5"
+            value={`${stats.activeAgents}/${stats.totalAgents}`}
             change="Active"
             changeType="up"
             icon="🤖"
             color="#8B5CF6"
-            subtitle="2 idle"
+            subtitle={`${stats.totalAgents - stats.activeAgents} idle`}
           />
           <StatCard
             label="Agent Hours"
-            value="142h"
+            value={`${stats.agentHours || 0}h`}
             change="+22%"
             changeType="up"
             icon="⏰"
@@ -141,7 +212,6 @@ export default function DashboardPage() {
 
         {/* Traffic Chart + Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Traffic Chart */}
           <div className="lg:col-span-2 bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-white">Traffic · Last 14 Days</h3>
@@ -156,41 +226,16 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={180}>
               <LineChart data={trafficData}>
-                <XAxis
-                  dataKey="day"
-                  tick={{ fill: "#5A5A6E", fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={3}
-                />
-                <YAxis
-                  tick={{ fill: "#5A5A6E", fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
+                <XAxis dataKey="day" tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} interval={3} />
+                <YAxis tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="visitors"
-                  stroke="#3B82F6"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: "#3B82F6" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="signups"
-                  stroke="#10B981"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4, fill: "#10B981" }}
-                />
+                <Line type="monotone" dataKey="visitors" stroke="#3B82F6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3B82F6" }} />
+                <Line type="monotone" dataKey="signups" stroke="#10B981" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#10B981" }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
-
           <div>
             <AlertsPreview />
           </div>
@@ -200,24 +245,11 @@ export default function DashboardPage() {
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-white">Project Comparison · MRR</h3>
-            <div className="flex gap-2">
-              <button className="text-xs px-2 py-1 rounded bg-[#3B82F6] text-white">MRR</button>
-              <button className="text-xs px-2 py-1 rounded bg-[#1A1A24] text-[#8B8B9E] hover:text-white">Users</button>
-            </div>
           </div>
-          <ResponsiveContainer width="100%" height={160}>
-            <BarChart data={projectComparisonData} barSize={28}>
-              <XAxis
-                dataKey="project"
-                tick={{ fill: "#5A5A6E", fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: "#5A5A6E", fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
+          <ResponsiveContainer width="100%" height={140}>
+            <BarChart data={projectComparisonData} barSize={24}>
+              <XAxis dataKey="project" tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} />
               <Tooltip content={<CustomTooltip />} />
               <Bar dataKey="mrr" fill="#3B82F6" radius={[4, 4, 0, 0]} />
             </BarChart>
