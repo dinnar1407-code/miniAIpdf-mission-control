@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = env("DATABASE_PROVIDER")
   url      = env("DATABASE_URL")
 }
 
@@ -22,16 +22,17 @@ model Project {
   alerts           Alert[]
   metrics          MetricSnapshot[]
   agentAssignments AgentAssignment[]
+  workflows        Workflow[]
 }
 
 model Agent {
-  id          String   @id @default(cuid())
-  name        String
-  type        String   // ceo, content, operations, data
-  status      String   @default("idle") // active, idle, error, paused
-  currentTask String?
+  id           String   @id @default(cuid())
+  name         String
+  type         String
+  status       String   @default("idle")
+  currentTask  String?
   lastActiveAt DateTime @default(now())
-  config      String   @default("{}") // JSON
+  config       String   @default("{}")
 
   agentAssignments AgentAssignment[]
   tasks            Task[]
@@ -45,7 +46,7 @@ model AgentAssignment {
   projectId  String
   agent      Agent    @relation(fields: [agentId], references: [id])
   project    Project  @relation(fields: [projectId], references: [id])
-  role       String   @default("contributor") // primary, contributor
+  role       String   @default("contributor")
   assignedAt DateTime @default(now())
 
   @@unique([agentId, projectId])
@@ -55,8 +56,8 @@ model Task {
   id          String    @id @default(cuid())
   title       String
   description String?
-  status      String    @default("todo") // todo, in_progress, review, done, blocked
-  priority    String    @default("medium") // low, medium, high, urgent
+  status      String    @default("todo")
+  priority    String    @default("medium")
   projectId   String?
   agentId     String?
   dueDate     DateTime?
@@ -71,13 +72,13 @@ model Task {
 model ContentItem {
   id           String    @id @default(cuid())
   title        String
-  platform     String    // youtube, tiktok, instagram, twitter, linkedin, blog, newsletter
-  type         String    @default("post") // tutorial, tip, announcement, post
-  status       String    @default("draft") // draft, scheduled, published, failed
+  platform     String
+  type         String    @default("post")
+  status       String    @default("draft")
   scheduledFor DateTime?
   publishedAt  DateTime?
   publishedUrl String?
-  metricsJson  String    @default("{}") // JSON: views, likes, shares
+  metricsJson  String    @default("{}")
   projectId    String?
   agentId      String?
   createdAt    DateTime  @default(now())
@@ -87,15 +88,15 @@ model ContentItem {
 }
 
 model Alert {
-  id              String    @id @default(cuid())
-  severity        String    // critical, warning, info
-  source          String    @default("system") // platform, system, agent, manual
-  message         String
-  status          String    @default("new") // new, acknowledged, resolved
-  projectId       String?
-  createdAt       DateTime  @default(now())
-  acknowledgedAt  DateTime?
-  resolvedAt      DateTime?
+  id             String    @id @default(cuid())
+  severity       String
+  source         String    @default("system")
+  message        String
+  status         String    @default("new")
+  projectId      String?
+  createdAt      DateTime  @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
 
   project Project? @relation(fields: [projectId], references: [id])
 }
@@ -104,9 +105,9 @@ model MetricSnapshot {
   id        String   @id @default(cuid())
   date      DateTime @default(now())
   platform  String
-  metric    String   // mrr, users, api_calls, traffic, conversion
+  metric    String
   value     Float
-  metadata  String   @default("{}") // JSON
+  metadata  String   @default("{}")
   projectId String?
 
   project Project? @relation(fields: [projectId], references: [id])
@@ -124,12 +125,61 @@ model ActivityLog {
   agent Agent? @relation(fields: [agentId], references: [id])
 }
 
+// ==================== WORKFLOW ENGINE ====================
+
+model Workflow {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  triggerType   String   @default("manual") // manual, schedule, webhook, event
+  triggerConfig String   @default("{}") // JSON: cron, webhookUrl, etc.
+  steps         String   @default("[]") // JSON array of step configs
+  status        String   @default("draft") // draft, active, paused, archived
+  projectId     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project Project?      @relation(fields: [projectId], references: [id])
+  runs    WorkflowRun[]
+}
+
 model WorkflowRun {
   id          String    @id @default(cuid())
   workflowId  String
-  status      String    @default("pending") // pending, running, completed, failed
+  workflow    Workflow  @relation(fields: [workflowId], references: [id])
+  status      String    @default("pending") // pending, running, completed, failed, cancelled
   currentStep Int       @default(0)
+  totalSteps  Int       @default(0)
   startedAt   DateTime?
   completedAt DateTime?
+  triggerData String    @default("{}") // JSON
+  stepResults String    @default("[]") // JSON array of step results
+  error       String?
   createdAt   DateTime  @default(now())
+
+  logs WorkflowLog[]
+}
+
+model WorkflowLog {
+  id        String      @id @default(cuid())
+  runId     String
+  run       WorkflowRun @relation(fields: [runId], references: [id])
+  stepIndex Int         @default(-1)
+  stepType  String      @default("system")
+  message   String
+  level     String      @default("info") // info, warn, error, success
+  createdAt DateTime    @default(now())
+}
+
+// ==================== API ACCESS ====================
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   @unique
+  permissions String   @default("read") // read, write, admin
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  active      Boolean  @default(true)
 }
