@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  color       String   @default("#3B82F6")
+  emoji       String   @default("📦")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+
+  tasks            Task[]
+  content          ContentItem[]
+  alerts           Alert[]
+  metrics          MetricSnapshot[]
+  agentAssignments AgentAssignment[]
+}
+
+model Agent {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   // ceo, content, operations, data
+  status      String   @default("idle") // active, idle, error, paused
+  currentTask String?
+  lastActiveAt DateTime @default(now())
+  config      String   @default("{}") // JSON
+
+  agentAssignments AgentAssignment[]
+  tasks            Task[]
+  contentItems     ContentItem[]
+  activityLogs     ActivityLog[]
+}
+
+model AgentAssignment {
+  id         String   @id @default(cuid())
+  agentId    String
+  projectId  String
+  agent      Agent    @relation(fields: [agentId], references: [id])
+  project    Project  @relation(fields: [projectId], references: [id])
+  role       String   @default("contributor") // primary, contributor
+  assignedAt DateTime @default(now())
+
+  @@unique([agentId, projectId])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("todo") // todo, in_progress, review, done, blocked
+  priority    String    @default("medium") // low, medium, high, urgent
+  projectId   String?
+  agentId     String?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  project Project? @relation(fields: [projectId], references: [id])
+  agent   Agent?   @relation(fields: [agentId], references: [id])
+}
+
+model ContentItem {
+  id           String    @id @default(cuid())
+  title        String
+  platform     String    // youtube, tiktok, instagram, twitter, linkedin, blog, newsletter
+  type         String    @default("post") // tutorial, tip, announcement, post
+  status       String    @default("draft") // draft, scheduled, published, failed
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  publishedUrl String?
+  metricsJson  String    @default("{}") // JSON: views, likes, shares
+  projectId    String?
+  agentId      String?
+  createdAt    DateTime  @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id])
+  agent   Agent?   @relation(fields: [agentId], references: [id])
+}
+
+model Alert {
+  id              String    @id @default(cuid())
+  severity        String    // critical, warning, info
+  source          String    @default("system") // platform, system, agent, manual
+  message         String
+  status          String    @default("new") // new, acknowledged, resolved
+  projectId       String?
+  createdAt       DateTime  @default(now())
+  acknowledgedAt  DateTime?
+  resolvedAt      DateTime?
+
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+model MetricSnapshot {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  platform  String
+  metric    String   // mrr, users, api_calls, traffic, conversion
+  value     Float
+  metadata  String   @default("{}") // JSON
+  projectId String?
+
+  project Project? @relation(fields: [projectId], references: [id])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  agentId   String?
+  action    String
+  target    String?
+  result    String?
+  projectId String?
+  timestamp DateTime @default(now())
+
+  agent Agent? @relation(fields: [agentId], references: [id])
+}
+
+model WorkflowRun {
+  id          String    @id @default(cuid())
+  workflowId  String
+  status      String    @default("pending") // pending, running, completed, failed
+  currentStep Int       @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
