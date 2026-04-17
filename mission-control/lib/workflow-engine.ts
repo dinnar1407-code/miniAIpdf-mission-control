@@ -163,8 +163,9 @@ export async function executeWorkflow(workflowId: string, triggerData: Record<st
   await addLog(run.id, -1, "system", `▶ Workflow "${workflow.name}" started`, "info");
   await addLog(run.id, -1, "system", `📋 ${steps.length} steps to execute`, "info");
 
-  const stepResults = steps.map((_, i) => ({
-    stepIndex: i, stepId: steps[i].id, status: "pending" as const,
+  type StepStatus = "pending" | "running" | "completed" | "failed";
+  const stepResults: Array<{ stepIndex: number; stepId?: string; status: StepStatus; startedAt?: string; completedAt?: string; output?: string; error?: string }> = steps.map((_, i) => ({
+    stepIndex: i, stepId: steps[i].id, status: "pending" as StepStatus,
   }));
 
   try {
