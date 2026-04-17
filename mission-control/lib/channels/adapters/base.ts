@@ -11,7 +11,7 @@ export abstract class BaseChannelAdapter implements ChannelAdapter {
   abstract readonly icon: string;
   abstract readonly color: string;
   abstract readonly supportedTypes: ContentType[];
-  abstract readonly maxLength?: number;
+  readonly maxLength?: number = undefined;  // 子类按需覆盖
   readonly requiresApproval: boolean = true;
 
   abstract publish(content: PublishContent, config: ChannelConfig): Promise<PublishResult>;
