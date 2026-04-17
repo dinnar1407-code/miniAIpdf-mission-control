@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
 }
 
@@ -26,7 +26,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
       <div>
         <h1 className="text-lg font-semibold text-white">{title}</h1>
         {subtitle && (
-          <p className="text-sm text-[#8B8B9E] mt-0.5">{subtitle}</p>
+          <div className="text-sm text-[#8B8B9E] mt-0.5">{subtitle}</div>
         )}
       </div>
 
