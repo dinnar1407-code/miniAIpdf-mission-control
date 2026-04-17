@@ -152,7 +152,7 @@ export function WorkflowEditor({
               <div className="flex gap-2 flex-shrink-0">
                 <select
                   value={status}
-                  onChange={e => setStatus(e.target.value)}
+                  onChange={e => setStatus(e.target.value as "active" | "draft" | "paused" | "archived")}
                   className="bg-[#1A1A24] border border-[#2A2A3A] text-xs text-white rounded px-2 py-1 focus:outline-none"
                 >
                   <option value="draft">Draft</option>
