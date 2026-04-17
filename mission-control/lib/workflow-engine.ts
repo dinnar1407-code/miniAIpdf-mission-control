@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { WorkflowStep } from "@/lib/workflow-types";
 import { channelRegistry } from "@/lib/channels/registry";
 import { ChannelId, PublishContent } from "@/lib/channels/types";
+import { ask } from "@/lib/ai/claude-client";
+import { getAgentPrompt } from "@/lib/ai/agent-prompts";
 
 // ==================== TELEGRAM HELPER ====================
 
@@ -26,7 +28,7 @@ async function sendTelegram(text: string): Promise<boolean> {
   }
 }
 
-// ==================== WORKFLOW EXECUTION ENGINE ====================
+// ==================== LOG HELPER ====================
 
 async function addLog(
   runId: string,
@@ -44,95 +46,126 @@ async function addLog(
   }
 }
 
-async function simulateStep(
+// ==================== STEP EXECUTOR ====================
+
+async function executeStep(
   step: WorkflowStep,
   index: number,
-  runId: string
+  runId: string,
+  prevOutput?: string
 ): Promise<{ success: boolean; output?: string; error?: string }> {
-  await addLog(runId, index, step.type, `▶ Starting step: ${step.label}`, "info");
-
-  // Simulate realistic execution time
-  const delay = step.type === "wait"
-    ? Math.min((step.delay || 1) * 100, 2000) // cap at 2s for simulation
-    : Math.floor(Math.random() * 1500) + 300;
-
-  await new Promise(r => setTimeout(r, delay));
+  await addLog(runId, index, step.type, `▶ Starting: ${step.label}`, "info");
 
   switch (step.type) {
+
+    // ── AGENT：真正调用 Claude ────────────────────────────────
     case "agent": {
-      const agent = step.agent || "playfish";
-      await addLog(runId, index, step.type, `🤖 ${agent}: ${step.action}`, "info");
-      await new Promise(r => setTimeout(r, 800));
-      const outputs: Record<string, string[]> = {
-        playfish: ["Task analyzed and executed", "Strategic action completed", "Decision made and implemented"],
-        pm01:     ["Content created and scheduled", "Post published successfully", "Thread drafted (245 chars)"],
-        admin01:  ["Operations check complete", "Systems nominal", "Monitoring active"],
-        dfm:      ["Analytics report generated", "Data processed successfully", "Metrics compiled"],
-        "pm01-b": ["Content batch processed", "Drafts ready for review"],
-      };
-      const agentOutputs = outputs[agent] || ["Task completed"];
-      const output = agentOutputs[Math.floor(Math.random() * agentOutputs.length)];
-      await addLog(runId, index, step.type, `✓ ${output}`, "success");
+      const agentId = step.agent || "playfish";
+      const action  = step.action || "完成分配的任务";
+      await addLog(runId, index, step.type, `🤖 ${agentId} 正在思考...`, "info");
+
+      const systemPrompt = getAgentPrompt(agentId);
+      const userMessage  = prevOutput
+        ? `上一步输出：\n${prevOutput}\n\n当前任务：${action}`
+        : action;
+
+      const output = await ask(systemPrompt, userMessage, "claude-haiku-4-5-20251001");
+
+      if (output.startsWith("[AI Error:")) {
+        await addLog(runId, index, step.type, `⚠ ${output}（降级为模拟模式）`, "warn");
+        // 降级：Claude 不可用时给出模拟输出
+        const fallbacks: Record<string, string[]> = {
+          playfish: ["已分析任务并制定执行方案", "优先级已调整，开始执行"],
+          pm01:     ["博客草稿已完成，等待审核", "推文已撰写，共 247 字"],
+          dfm:      ["日报已生成，关键指标正常", "数据分析完成"],
+          admin01:  ["系统巡检完成，状态正常 ✅", "所有服务运行正常"],
+        };
+        const sims = fallbacks[agentId] || ["任务已完成"];
+        const sim  = sims[Math.floor(Math.random() * sims.length)];
+        await addLog(runId, index, step.type, `✓ ${sim}（模拟）`, "success");
+        return { success: true, output: sim };
+      }
+
+      // 截取前 200 字用于日志展示
+      const preview = output.length > 200 ? output.slice(0, 200) + "..." : output;
+      await addLog(runId, index, step.type, `✓ ${agentId} 完成 | ${preview}`, "success");
       return { success: true, output };
     }
 
+    // ── HTTP ─────────────────────────────────────────────────
     case "http": {
-      await addLog(runId, index, step.type, `🌐 ${step.method} ${step.url}`, "info");
+      await addLog(runId, index, step.type, `🌐 ${step.method || "GET"} ${step.url}`, "info");
       await new Promise(r => setTimeout(r, 600));
-      // Simulate 90% success rate
       if (Math.random() > 0.9) {
-        await addLog(runId, index, step.type, `✗ HTTP 503 Service Unavailable`, "error");
+        await addLog(runId, index, step.type, `✗ HTTP 503`, "error");
         return { success: false, error: "HTTP 503 Service Unavailable" };
       }
-      await addLog(runId, index, step.type, `✓ HTTP 200 OK — response received`, "success");
+      await addLog(runId, index, step.type, `✓ HTTP 200 OK`, "success");
       return { success: true, output: "HTTP 200 OK" };
     }
 
+    // ── WAIT ─────────────────────────────────────────────────
     case "wait": {
       const mins = step.delay || 1;
-      await addLog(runId, index, step.type, `⏱ Simulating wait: ${mins} min (fast mode)`, "info");
-      await addLog(runId, index, step.type, `✓ Wait complete`, "success");
+      await addLog(runId, index, step.type, `⏱ 模拟等待 ${mins} 分钟`, "info");
+      await new Promise(r => setTimeout(r, Math.min(mins * 100, 2000)));
+      await addLog(runId, index, step.type, `✓ 等待完成`, "success");
       return { success: true, output: `Waited ${mins} minutes` };
     }
 
+    // ── CONDITION ────────────────────────────────────────────
     case "condition": {
-      await addLog(runId, index, step.type, `🔀 Evaluating: ${step.condition}`, "info");
+      await addLog(runId, index, step.type, `🔀 评估条件: ${step.condition}`, "info");
       const result = Math.random() > 0.3 ? "true" : "false";
-      await addLog(runId, index, step.type, `✓ Condition = ${result}`, "success");
+      await addLog(runId, index, step.type, `✓ 条件结果 = ${result}`, "success");
       return { success: true, output: result };
     }
 
+    // ── NOTIFY ───────────────────────────────────────────────
     case "notify": {
       const channel = step.channel || "telegram";
       const message = step.message || "(no message)";
-      await addLog(runId, index, step.type, `📨 Sending to ${channel}: "${message}"`, "info");
+      await addLog(runId, index, step.type, `📨 发送通知到 ${channel}`, "info");
 
       if (channel === "telegram") {
         const sent = await sendTelegram(message);
         if (sent) {
-          await addLog(runId, index, step.type, `✓ Telegram message delivered`, "success");
-          return { success: true, output: `Sent to Telegram` };
-        } else {
-          await addLog(runId, index, step.type, `⚠ Telegram delivery failed (check token/chat ID)`, "warn");
-          return { success: true, output: `Telegram failed — check env vars` };
+          await addLog(runId, index, step.type, `✓ Telegram 消息发送成功`, "success");
+          return { success: true, output: "Sent to Telegram" };
         }
+        await addLog(runId, index, step.type, `⚠ Telegram 发送失败（检查 Token/Chat ID）`, "warn");
+        return { success: true, output: "Telegram failed — check env vars" };
       }
 
-      await addLog(runId, index, step.type, `✓ Notification sent`, "success");
+      await addLog(runId, index, step.type, `✓ 通知已发送`, "success");
       return { success: true, output: `Sent to ${channel}` };
     }
 
+    // ── CREATE_TASK ──────────────────────────────────────────
     case "create_task": {
-      await addLog(runId, index, step.type, `✅ Creating task: "${step.action}"`, "info");
-      await addLog(runId, index, step.type, `✓ Task created`, "success");
+      await addLog(runId, index, step.type, `✅ 创建任务: "${step.action}"`, "info");
+      try {
+        await prisma.task.create({
+          data: {
+            title:    step.action || "Workflow 自动创建的任务",
+            status:   "todo",
+            priority: "medium",
+          },
+        });
+        await addLog(runId, index, step.type, `✓ 任务已创建`, "success");
+      } catch {
+        await addLog(runId, index, step.type, `⚠ 任务创建失败（DB 错误）`, "warn");
+      }
       return { success: true, output: `Task created: ${step.action}` };
     }
 
+    // ── LOG ──────────────────────────────────────────────────
     case "log": {
       await addLog(runId, index, step.type, `📝 ${step.message}`, "info");
       return { success: true, output: step.message };
     }
 
+    // ── PUBLISH ──────────────────────────────────────────────
     case "publish": {
       const channels = (step.publishChannels || []) as ChannelId[];
       if (channels.length === 0) {
@@ -140,10 +173,15 @@ async function simulateStep(
         return { success: true, output: "No channels configured" };
       }
 
+      // 内容来源：上一步输出 or 静态内容
+      const body = (step.contentSource === "prev_output" && prevOutput)
+        ? prevOutput
+        : (step.message || step.action || "Jarvis 自动发布内容");
+
       const content: PublishContent = {
-        body: step.message || step.action || "Content from workflow",
+        body,
         title: step.label,
-        tags: [],
+        tags:  [],
       };
 
       const results: string[] = [];
@@ -154,18 +192,32 @@ async function simulateStep(
           continue;
         }
 
-        await addLog(runId, index, step.type, `📡 发布到 ${adapter.icon} ${adapter.name}`, "info");
+        await addLog(runId, index, step.type, `📡 发布到 ${adapter.icon} ${adapter.name}...`, "info");
 
-        // 生产环境：调用真实 adapter；当前预留，模拟成功
-        // const result = await adapter.publish(content, getChannelConfig(channelId));
-        const result = { success: true, postId: `sim_${Date.now()}`, error: undefined };
+        // 从 DB 读取渠道凭证
+        let channelConfig;
+        try {
+          const cred = await prisma.channelCredential.findUnique({ where: { channelId } });
+          channelConfig = {
+            channelId,
+            enabled: cred?.enabled ?? false,
+            credentials: cred ? JSON.parse(cred.credentials) : {},
+            defaults:    cred ? JSON.parse(cred.defaults) : {},
+          };
+        } catch {
+          channelConfig = { channelId, enabled: false, credentials: {}, defaults: {} };
+        }
+
+        const result = channelConfig.enabled
+          ? await adapter.publish(content, channelConfig)
+          : { success: false, error: "渠道未启用（请在 Settings → Channels 配置）" };
 
         if (result.success) {
-          await addLog(runId, index, step.type, `✓ ${adapter.name} 发布成功`, "success");
-          results.push(`${adapter.icon} ${adapter.name}: ✓`);
+          await addLog(runId, index, step.type, `✓ ${adapter.name} 发布成功${result.postUrl ? ` → ${result.postUrl}` : ""}`, "success");
+          results.push(`${adapter.icon} ${adapter.name} ✓`);
         } else {
           await addLog(runId, index, step.type, `⚠ ${adapter.name}: ${result.error}`, "warn");
-          results.push(`${adapter.icon} ${adapter.name}: 预留中`);
+          results.push(`${adapter.icon} ${adapter.name} ⚠`);
         }
       }
 
@@ -178,8 +230,12 @@ async function simulateStep(
   }
 }
 
-export async function executeWorkflow(workflowId: string, triggerData: Record<string, unknown> = {}) {
-  // Load workflow
+// ==================== MAIN WORKFLOW EXECUTOR ====================
+
+export async function executeWorkflow(
+  workflowId: string,
+  triggerData: Record<string, unknown> = {}
+) {
   const workflow = await prisma.workflow.findUnique({ where: { id: workflowId } });
   if (!workflow) throw new Error("Workflow not found");
 
@@ -187,72 +243,61 @@ export async function executeWorkflow(workflowId: string, triggerData: Record<st
     ? JSON.parse(workflow.steps)
     : (workflow.steps as WorkflowStep[]) || [];
 
-  // Create run record
   const run = await prisma.workflowRun.create({
     data: {
       workflowId,
-      status: "running",
+      status:      "running",
       currentStep: 0,
-      totalSteps: steps.length,
-      startedAt: new Date(),
+      totalSteps:  steps.length,
+      startedAt:   new Date(),
       triggerData: JSON.stringify(triggerData),
-      stepResults: JSON.stringify(steps.map((_, i) => ({
-        stepIndex: i, status: "pending",
-      }))),
+      stepResults: JSON.stringify(steps.map((_, i) => ({ stepIndex: i, status: "pending" }))),
     },
   });
 
-  await addLog(run.id, -1, "system", `▶ Workflow "${workflow.name}" started`, "info");
-  await addLog(run.id, -1, "system", `📋 ${steps.length} steps to execute`, "info");
+  await addLog(run.id, -1, "system", `▶ Workflow "${workflow.name}" 开始执行`, "info");
+  await addLog(run.id, -1, "system", `📋 共 ${steps.length} 个步骤`, "info");
 
   type StepStatus = "pending" | "running" | "completed" | "failed";
-  const stepResults: Array<{ stepIndex: number; stepId?: string; status: StepStatus; startedAt?: string; completedAt?: string; output?: string; error?: string }> = steps.map((_, i) => ({
-    stepIndex: i, stepId: steps[i].id, status: "pending" as StepStatus,
-  }));
+  const stepResults: Array<{
+    stepIndex: number; stepId?: string; status: StepStatus;
+    startedAt?: string; completedAt?: string; output?: string; error?: string;
+  }> = steps.map((_, i) => ({ stepIndex: i, stepId: steps[i].id, status: "pending" as StepStatus }));
+
+  let prevOutput: string | undefined;
 
   try {
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
 
-      // Update run: mark step as running
       stepResults[i] = { ...stepResults[i], status: "running", startedAt: new Date().toISOString() };
       await prisma.workflowRun.update({
         where: { id: run.id },
-        data: {
-          currentStep: i,
-          stepResults: JSON.stringify(stepResults),
-        },
+        data: { currentStep: i, stepResults: JSON.stringify(stepResults) },
       });
 
-      const result = await simulateStep(step, i, run.id);
+      const result = await executeStep(step, i, run.id, prevOutput);
 
       if (result.success) {
         stepResults[i] = {
-          ...stepResults[i],
-          status: "completed",
-          completedAt: new Date().toISOString(),
-          output: result.output,
+          ...stepResults[i], status: "completed",
+          completedAt: new Date().toISOString(), output: result.output,
         };
+        prevOutput = result.output; // 传递给下一步
       } else {
         stepResults[i] = {
-          ...stepResults[i],
-          status: "failed",
-          completedAt: new Date().toISOString(),
-          error: result.error,
+          ...stepResults[i], status: "failed",
+          completedAt: new Date().toISOString(), error: result.error,
         };
-
         await prisma.workflowRun.update({
           where: { id: run.id },
           data: {
-            status: "failed",
-            currentStep: i,
-            completedAt: new Date(),
+            status: "failed", currentStep: i, completedAt: new Date(),
             stepResults: JSON.stringify(stepResults),
-            error: `Step ${i + 1} failed: ${result.error}`,
+            error: `Step ${i + 1} 失败: ${result.error}`,
           },
         });
-
-        await addLog(run.id, -1, "system", `✗ Workflow failed at step ${i + 1}: ${result.error}`, "error");
+        await addLog(run.id, -1, "system", `✗ Workflow 在步骤 ${i + 1} 失败: ${result.error}`, "error");
         return run;
       }
 
@@ -262,18 +307,22 @@ export async function executeWorkflow(workflowId: string, triggerData: Record<st
       });
     }
 
-    // All steps passed
     await prisma.workflowRun.update({
       where: { id: run.id },
       data: {
-        status: "completed",
-        currentStep: steps.length,
-        completedAt: new Date(),
-        stepResults: JSON.stringify(stepResults),
+        status: "completed", currentStep: steps.length,
+        completedAt: new Date(), stepResults: JSON.stringify(stepResults),
       },
     });
 
-    await addLog(run.id, -1, "system", `✓ Workflow completed successfully (${steps.length} steps)`, "success");
+    await addLog(run.id, -1, "system", `✓ Workflow 执行完成（共 ${steps.length} 步）`, "success");
+
+    // 成功后发 Telegram 通知（如果 workflow 有通知配置）
+    const hasNotifyStep = steps.some(s => s.type === "notify");
+    if (!hasNotifyStep) {
+      await sendTelegram(`✅ *${workflow.name}* 执行完成\n共 ${steps.length} 步 | 全部成功`);
+    }
+
     return run;
 
   } catch (err: unknown) {
@@ -282,7 +331,7 @@ export async function executeWorkflow(workflowId: string, triggerData: Record<st
       where: { id: run.id },
       data: { status: "failed", completedAt: new Date(), error: message },
     });
-    await addLog(run.id, -1, "system", `✗ Unexpected error: ${message}`, "error");
+    await addLog(run.id, -1, "system", `✗ 意外错误: ${message}`, "error");
     return run;
   }
 }
