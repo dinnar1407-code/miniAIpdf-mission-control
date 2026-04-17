@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { WorkflowStep } from "@/lib/workflow-types";
+import { channelRegistry } from "@/lib/channels/registry";
+import { ChannelId, PublishContent } from "@/lib/channels/types";
 
 // ==================== TELEGRAM HELPER ====================
 
@@ -129,6 +131,46 @@ async function simulateStep(
     case "log": {
       await addLog(runId, index, step.type, `📝 ${step.message}`, "info");
       return { success: true, output: step.message };
+    }
+
+    case "publish": {
+      const channels = (step.publishChannels || []) as ChannelId[];
+      if (channels.length === 0) {
+        await addLog(runId, index, step.type, `⚠ 未配置发布渠道`, "warn");
+        return { success: true, output: "No channels configured" };
+      }
+
+      const content: PublishContent = {
+        body: step.message || step.action || "Content from workflow",
+        title: step.label,
+        tags: [],
+      };
+
+      const results: string[] = [];
+      for (const channelId of channels) {
+        const adapter = channelRegistry.get(channelId);
+        if (!adapter) {
+          await addLog(runId, index, step.type, `⚠ 渠道 ${channelId} 未注册`, "warn");
+          continue;
+        }
+
+        await addLog(runId, index, step.type, `📡 发布到 ${adapter.icon} ${adapter.name}`, "info");
+
+        // 生产环境：调用真实 adapter；当前预留，模拟成功
+        // const result = await adapter.publish(content, getChannelConfig(channelId));
+        const result = { success: true, postId: `sim_${Date.now()}`, error: undefined };
+
+        if (result.success) {
+          await addLog(runId, index, step.type, `✓ ${adapter.name} 发布成功`, "success");
+          results.push(`${adapter.icon} ${adapter.name}: ✓`);
+        } else {
+          await addLog(runId, index, step.type, `⚠ ${adapter.name}: ${result.error}`, "warn");
+          results.push(`${adapter.icon} ${adapter.name}: 预留中`);
+        }
+      }
+
+      void content;
+      return { success: true, output: results.join(" | ") };
     }
 
     default:

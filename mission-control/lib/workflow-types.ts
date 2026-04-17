@@ -1,7 +1,7 @@
 // ==================== WORKFLOW TYPE DEFINITIONS ====================
 
 export type TriggerType = "manual" | "schedule" | "webhook" | "event";
-export type StepType = "agent" | "http" | "wait" | "condition" | "notify" | "create_task" | "log";
+export type StepType = "agent" | "http" | "wait" | "condition" | "notify" | "create_task" | "log" | "publish";
 export type RunStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 export type LogLevel = "info" | "warn" | "error" | "success";
 
@@ -23,6 +23,12 @@ export interface WorkflowStep {
   // notify step
   channel?: string;
   message?: string;
+  // publish step
+  publishChannels?: string[];         // ["twitter", "linkedin", "telegram_channel"]
+  contentSource?: "static" | "prev_output" | "agent_output";
+  contentType?: string;               // "short_post" | "article" | ...
+  requireApproval?: boolean;
+  adaptContent?: boolean;             // AI 自动适配各渠道格式
 }
 
 export interface TriggerConfig {
@@ -125,6 +131,16 @@ export const STEP_TEMPLATES: Record<StepType, Partial<WorkflowStep>> = {
     config: {},
     message: "Log message here",
   },
+  publish: {
+    type: "publish",
+    label: "Publish to Channels",
+    config: {},
+    publishChannels: ["telegram_channel"],
+    contentSource: "prev_output",
+    contentType: "short_post",
+    requireApproval: true,
+    adaptContent: true,
+  },
 };
 
 export const STEP_ICONS: Record<StepType, string> = {
@@ -135,6 +151,7 @@ export const STEP_ICONS: Record<StepType, string> = {
   notify: "📨",
   create_task: "✅",
   log: "📝",
+  publish: "📡",
 };
 
 export const AGENT_OPTIONS = [
