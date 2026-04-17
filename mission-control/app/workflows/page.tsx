@@ -1,184 +1,221 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
-import { useState } from "react";
-import { Play, Plus, Clock, CheckCircle, XCircle, Pause } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Play, Plus, Edit2, ChevronRight, Loader2, Clock, CheckCircle, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-const WORKFLOWS = [
-  {
-    id: "1",
-    name: "MiniAIPDF Daily Growth",
-    description: "Publish SEO blog → share on Twitter → monitor engagement → report",
-    triggerType: "scheduled",
-    schedule: "Daily at 9am",
-    status: "active",
-    steps: ["Write blog post", "Publish to blog", "Tweet thread", "Monitor 2h", "Report metrics"],
-    lastRun: "Today 9:01 AM",
-    successRate: "94%",
-    totalRuns: 47,
-    project: "MiniAIPDF",
-    projectColor: "#3B82F6",
-  },
-  {
-    id: "2",
-    name: "FurMates Cart Recovery",
-    description: "Detect abandoned cart → send recovery email → follow up after 24h",
-    triggerType: "event",
-    schedule: "On: cart_abandoned",
-    status: "active",
-    steps: ["Detect event", "Wait 1h", "Send email 1", "Wait 24h", "Send email 2"],
-    lastRun: "2h ago",
-    successRate: "67%",
-    totalRuns: 23,
-    project: "FurMates",
-    projectColor: "#10B981",
-  },
-  {
-    id: "3",
-    name: "NIW Document Tracker",
-    description: "Monitor deadlines → notify Terry → draft reminder document",
-    triggerType: "scheduled",
-    schedule: "Weekly on Monday",
-    status: "active",
-    steps: ["Check deadlines", "Generate report", "Notify Terry", "Draft documents"],
-    lastRun: "Monday 8:00 AM",
-    successRate: "100%",
-    totalRuns: 8,
-    project: "NIW",
-    projectColor: "#F59E0B",
-  },
-  {
-    id: "4",
-    name: "Weekly Cross-Project Report",
-    description: "Aggregate metrics from all projects → generate executive summary → send to Terry",
-    triggerType: "scheduled",
-    schedule: "Fridays at 5pm",
-    status: "draft",
-    steps: ["Fetch MiniAIPDF metrics", "Fetch FurMates metrics", "Aggregate all data", "Generate summary", "Send report"],
-    lastRun: "Never",
-    successRate: "—",
-    totalRuns: 0,
-    project: "All",
-    projectColor: "#8B5CF6",
-  },
-];
+interface WorkflowRun {
+  id: string;
+  status: string;
+  createdAt: string;
+}
 
-const statusConfig: Record<string, { color: string; bg: string; icon: JSX.Element }> = {
-  active: { color: "#10B981", bg: "#10B98115", icon: <CheckCircle size={12} /> },
-  draft: { color: "#8B8B9E", bg: "#2A2A3A", icon: <Pause size={12} /> },
-  failed: { color: "#EF4444", bg: "#EF444415", icon: <XCircle size={12} /> },
+interface Workflow {
+  id: string;
+  name: string;
+  description?: string;
+  triggerType: string;
+  triggerConfig: string;
+  status: string;
+  steps: string;
+  createdAt: string;
+  updatedAt: string;
+  runs: WorkflowRun[];
+}
+
+const triggerIcons: Record<string, string> = {
+  manual: "🖱", schedule: "⏰", webhook: "🌐", event: "⚡",
 };
 
+const statusConfig: Record<string, { color: string; bg: string }> = {
+  active: { color: "#10B981", bg: "#10B98115" },
+  draft:  { color: "#8B8B9E", bg: "#2A2A3A" },
+  paused: { color: "#F59E0B", bg: "#F59E0B15" },
+  archived: { color: "#EF4444", bg: "#EF444415" },
+};
+
+function RunStatusIcon({ status }: { status: string }) {
+  if (status === "completed") return <CheckCircle size={12} className="text-green-400" />;
+  if (status === "failed")    return <XCircle size={12} className="text-red-400" />;
+  if (status === "running")   return <Loader2 size={12} className="text-blue-400 animate-spin" />;
+  return <Clock size={12} className="text-[#5A5A6E]" />;
+}
+
 export default function WorkflowsPage() {
-  const [workflows, setWorkflows] = useState(WORKFLOWS);
+  const router = useRouter();
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [runningId, setRunningId] = useState<string | null>(null);
 
-  const handleRun = (id: string) => {
-    setRunningId(id);
-    setTimeout(() => setRunningId(null), 3000);
+  useEffect(() => {
+    fetch("/api/workflows")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setWorkflows(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const handleRun = async (wf: Workflow) => {
+    setRunningId(wf.id);
+    try {
+      const res = await fetch(`/api/workflows/${wf.id}/run`, { method: "POST" });
+      if (res.ok) {
+        const run = await res.json();
+        router.push(`/workflows/${wf.id}/runs/${run.id}`);
+      }
+    } catch {}
+    finally { setRunningId(null); }
   };
+
+  const handleCreate = async () => {
+    const res = await fetch("/api/workflows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "New Workflow", status: "draft", triggerType: "manual" }),
+    });
+    if (res.ok) {
+      const wf = await res.json();
+      router.push(`/workflows/${wf.id}`);
+    } else {
+      router.push("/workflows/new");
+    }
+  };
+
+  const stepCount = (wf: Workflow) => {
+    try { return (JSON.parse(wf.steps) as unknown[]).length; } catch { return 0; }
+  };
+
+  const lastRun = (wf: Workflow) => {
+    if (!wf.runs?.length) return "Never";
+    return new Date(wf.runs[0].createdAt).toLocaleDateString();
+  };
+
+  const successRate = (wf: Workflow) => {
+    if (!wf.runs?.length) return "—";
+    const done = wf.runs.filter(r => r.status === "completed").length;
+    return `${Math.round((done / wf.runs.length) * 100)}%`;
+  };
+
+  const activeCount = workflows.filter(w => w.status === "active").length;
+  const draftCount  = workflows.filter(w => w.status === "draft").length;
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title="Workflows"
-        subtitle="Automation engine"
-        actions={
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-blue-600 text-white text-xs rounded-md transition-colors">
-            <Plus size={13} /> New Workflow
-          </button>
-        }
+        subtitle="Automation engine · J.A.R.V.I.S. protocols"
       />
 
-      <div className="p-6 space-y-4">
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-2">
-          {[
-            { label: "Active", count: workflows.filter(w => w.status === "active").length, color: "#10B981" },
-            { label: "Total Runs", count: workflows.reduce((a, w) => a + w.totalRuns, 0), color: "#3B82F6" },
-            { label: "Draft", count: workflows.filter(w => w.status === "draft").length, color: "#8B8B9E" },
-          ].map((s) => (
-            <div key={s.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold" style={{ color: s.color }}>{s.count}</div>
-              <div className="text-xs text-[#8B8B9E]">{s.label}</div>
-            </div>
-          ))}
+      <div className="p-4 md:p-6 space-y-4">
+        {/* New Workflow button — prominent at top */}
+        <div className="flex items-center justify-between">
+          <div className="grid grid-cols-4 gap-3 flex-1 mr-4">
+            {[
+              { label: "Active",     count: activeCount,        color: "#10B981" },
+              { label: "Draft",      count: draftCount,         color: "#8B8B9E" },
+              { label: "Total Runs", count: workflows.reduce((a, w) => a + (w.runs?.length || 0), 0), color: "#3B82F6" },
+              { label: "Workflows",  count: workflows.length,   color: "#8B5CF6" },
+            ].map(s => (
+              <div key={s.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-3 text-center">
+                <div className="text-xl font-bold" style={{ color: s.color }}>{s.count}</div>
+                <div className="text-xs text-[#8B8B9E] mt-0.5">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#3B82F6] hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors flex-shrink-0"
+          >
+            <Plus size={16} /> New Workflow
+          </button>
         </div>
 
-        {workflows.map((wf) => {
-          const config = statusConfig[wf.status];
-          const isRunning = runningId === wf.id;
+        {/* Workflow list */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-[#5A5A6E]">
+            <Loader2 size={18} className="animate-spin mr-2" /> Loading workflows…
+          </div>
+        ) : workflows.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-[#2A2A3A] rounded-xl">
+            <p className="text-[#8B8B9E] mb-3">No workflows yet</p>
+            <button
+              onClick={handleCreate}
+              className="px-4 py-2 bg-[#3B82F6] hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
+            >
+              Create your first workflow
+            </button>
+          </div>
+        ) : (
+          workflows.map((wf) => {
+            const cfg       = statusConfig[wf.status] || statusConfig.draft;
+            const isRunning = runningId === wf.id;
+            const lastRunStatus = wf.runs?.[0]?.status;
 
-          return (
-            <div key={wf.id} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4 hover:border-[#3A3A4A] transition-colors">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-white text-sm">{wf.name}</span>
-                    <span
-                      className={cn("text-xs px-1.5 py-0.5 rounded flex items-center gap-1")}
-                      style={{ color: config.color, backgroundColor: config.bg }}
-                    >
-                      {config.icon} {wf.status}
-                    </span>
+            return (
+              <div key={wf.id} className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 hover:border-[#3A3A4A] transition-colors">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="font-semibold text-white text-sm">{wf.name}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: cfg.color, backgroundColor: cfg.bg }}>
+                        {wf.status}
+                      </span>
+                      <span className="text-xs text-[#5A5A6E]">
+                        {triggerIcons[wf.triggerType] || "🖱"} {wf.triggerType}
+                      </span>
+                    </div>
+
+                    {wf.description && (
+                      <div className="text-xs text-[#8B8B9E] mb-2">{wf.description}</div>
+                    )}
+
+                    <div className="flex items-center gap-4 text-xs text-[#5A5A6E]">
+                      <span>⚡ {stepCount(wf)} steps</span>
+                      <span className="flex items-center gap-1">
+                        {lastRunStatus && <RunStatusIcon status={lastRunStatus} />}
+                        Last: {lastRun(wf)}
+                      </span>
+                      <span>✅ {successRate(wf)}</span>
+                      <span>🔄 {wf.runs?.length || 0} runs</span>
+                    </div>
                   </div>
-                  <div className="text-xs text-[#8B8B9E] mb-3">{wf.description}</div>
 
-                  {/* Steps */}
-                  <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
-                    {wf.steps.map((step, i) => (
-                      <div key={i} className="flex items-center gap-1 flex-shrink-0">
-                        <div className="bg-[#1A1A24] border border-[#2A2A3A] rounded px-2 py-1 text-xs text-[#8B8B9E] whitespace-nowrap">
-                          {step}
-                        </div>
-                        {i < wf.steps.length - 1 && (
-                          <div className="text-[#5A5A6E] text-xs">→</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-4 text-xs text-[#5A5A6E]">
-                    <span>
-                      <Clock size={10} className="inline mr-1" />
-                      {wf.schedule}
-                    </span>
-                    <span>Last run: {wf.lastRun}</span>
-                    <span>Success: {wf.successRate}</span>
-                    <span>{wf.totalRuns} runs</span>
-                    <span
-                      className="text-xs px-1.5 py-0.5 rounded ml-auto"
-                      style={{
-                        backgroundColor: `${wf.projectColor}20`,
-                        color: wf.projectColor,
-                      }}
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <Link
+                      href={`/workflows/${wf.id}`}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[#8B8B9E] hover:text-white hover:bg-[#1A1A24] transition-colors"
                     >
-                      {wf.project}
-                    </span>
+                      <Edit2 size={12} /> Edit
+                    </Link>
+                    <Link
+                      href={`/workflows/${wf.id}/runs`}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[#8B8B9E] hover:text-white hover:bg-[#1A1A24] transition-colors"
+                    >
+                      Runs <ChevronRight size={12} />
+                    </Link>
+                    <button
+                      onClick={() => handleRun(wf)}
+                      disabled={isRunning}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                        isRunning
+                          ? "bg-blue-500/10 text-blue-400 cursor-default"
+                          : "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                      )}
+                    >
+                      {isRunning
+                        ? <><Loader2 size={11} className="animate-spin" /> Running…</>
+                        : <><Play size={11} /> Run</>
+                      }
+                    </button>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleRun(wf.id)}
-                  disabled={isRunning}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all flex-shrink-0",
-                    isRunning
-                      ? "bg-[#10B98120] text-[#10B981] cursor-default"
-                      : "bg-[#1A1A24] text-[#8B8B9E] hover:text-white hover:bg-[#2A2A3A]"
-                  )}
-                >
-                  {isRunning ? (
-                    <><span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" /> Running...</>
-                  ) : (
-                    <><Play size={12} /> Run</>
-                  )}
-                </button>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
