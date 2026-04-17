@@ -36,6 +36,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // Delete related logs and runs first, then the workflow
+    const runs = await prisma.workflowRun.findMany({
+      where: { workflowId: params.id },
+      select: { id: true },
+    });
+    const runIds = runs.map(r => r.id);
+    if (runIds.length > 0) {
+      await prisma.workflowLog.deleteMany({ where: { runId: { in: runIds } } });
+      await prisma.workflowRun.deleteMany({ where: { workflowId: params.id } });
+    }
     await prisma.workflow.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
   } catch {
