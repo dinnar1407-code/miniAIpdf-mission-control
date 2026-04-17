@@ -1,264 +1,198 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
-import { useState } from "react";
-import { Plus, Calendar, List } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { RefreshCw, Loader2, CheckCircle, Clock, XCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PLATFORM_ICONS: Record<string, string> = {
-  twitter: "🐦",
-  youtube: "📺",
-  instagram: "📸",
-  linkedin: "🔗",
-  blog: "📰",
-  newsletter: "📧",
-  tiktok: "🎵",
+interface ContentItem {
+  id: string; title: string; body: string;
+  channelIds: string; contentType: string; status: string;
+  scheduledFor: string | null; publishedAt: string | null;
+  publishResults: string; workflowRunId: string | null; createdAt: string;
+}
+
+const CHANNEL_META: Record<string, { icon: string; name: string }> = {
+  telegram_channel: { icon: "✈️", name: "Telegram" },
+  twitter:          { icon: "𝕏",  name: "Twitter" },
+  linkedin:         { icon: "💼", name: "LinkedIn" },
+  wordpress:        { icon: "📝", name: "WordPress" },
+  wechat:           { icon: "💬", name: "微信公众号" },
+  xiaohongshu:      { icon: "📕", name: "小红书" },
+  youtube:          { icon: "▶️", name: "YouTube" },
+  medium:           { icon: "📖", name: "Medium" },
 };
 
-const INITIAL_CONTENT = [
-  {
-    id: "1",
-    title: "5 Ways AI Can Compress Your PDFs Without Losing Quality",
-    platform: "blog",
-    type: "tutorial",
-    status: "published",
-    scheduledFor: null,
-    publishedAt: "2026-04-15",
-    project: "MiniAIPDF",
-    projectColor: "#3B82F6",
-    agentEmoji: "📝",
-    agentName: "PM01",
-    metrics: { views: 1240, likes: 47 },
-  },
-  {
-    id: "2",
-    title: "Thread: Why your PDF tools are costing you 2h/day",
-    platform: "twitter",
-    type: "tip",
-    status: "published",
-    scheduledFor: null,
-    publishedAt: "2026-04-16",
-    project: "MiniAIPDF",
-    projectColor: "#3B82F6",
-    agentEmoji: "📝",
-    agentName: "PM01",
-    metrics: { views: 8400, likes: 312 },
-  },
-  {
-    id: "3",
-    title: "FurMates Spring Collection — Dog Beds Review",
-    platform: "instagram",
-    type: "post",
-    status: "scheduled",
-    scheduledFor: "2026-04-18 10:00",
-    publishedAt: null,
-    project: "FurMates",
-    projectColor: "#10B981",
-    agentEmoji: "🌾",
-    agentName: "Playfish",
-    metrics: null,
-  },
-  {
-    id: "4",
-    title: "MiniAIPDF API Integration Guide (YouTube)",
-    platform: "youtube",
-    type: "tutorial",
-    status: "draft",
-    scheduledFor: null,
-    publishedAt: null,
-    project: "MiniAIPDF",
-    projectColor: "#3B82F6",
-    agentEmoji: "📝",
-    agentName: "PM01",
-    metrics: null,
-  },
-  {
-    id: "5",
-    title: "wheatcoin SDK v2 — What's New",
-    platform: "newsletter",
-    type: "announcement",
-    status: "published",
-    scheduledFor: null,
-    publishedAt: "2026-04-14",
-    project: "wheatcoin",
-    projectColor: "#F97316",
-    agentEmoji: "📊",
-    agentName: "DFM",
-    metrics: { views: 340, likes: 28 },
-  },
-  {
-    id: "6",
-    title: "LinkedIn: Building AI Agents for your SaaS",
-    platform: "linkedin",
-    type: "post",
-    status: "scheduled",
-    scheduledFor: "2026-04-17 09:00",
-    publishedAt: null,
-    project: "MiniAIPDF",
-    projectColor: "#3B82F6",
-    agentEmoji: "🌾",
-    agentName: "Playfish",
-    metrics: null,
-  },
-];
-
-const statusColors: Record<string, string> = {
-  published: "text-[#10B981] bg-[#10B98115]",
-  scheduled: "text-[#3B82F6] bg-[#3B82F615]",
-  draft: "text-[#8B8B9E] bg-[#2A2A3A]",
-  failed: "text-[#EF4444] bg-[#EF444415]",
+const STATUS_CONFIG: Record<string, { icon: React.ReactNode; label: string; cls: string }> = {
+  draft:     { icon: <Clock size={11} />,       label: "草稿",   cls: "text-[#8B8B9E] bg-[#2A2A3A]" },
+  approved:  { icon: <CheckCircle size={11} />, label: "已审批", cls: "text-blue-400 bg-blue-400/10" },
+  published: { icon: <CheckCircle size={11} />, label: "已发布", cls: "text-green-400 bg-green-400/10" },
+  failed:    { icon: <XCircle size={11} />,     label: "失败",   cls: "text-red-400 bg-red-400/10" },
+  scheduled: { icon: <Clock size={11} />,       label: "待发布", cls: "text-yellow-400 bg-yellow-400/10" },
 };
+
+const TYPE_LABELS: Record<string, string> = {
+  short_post: "短帖", long_post: "长文", article: "博客",
+  thread: "推文串", video: "视频", image_post: "图文", link_share: "链接",
+};
+
+const FILTERS = ["all", "draft", "approved", "scheduled", "published", "failed"] as const;
+type FilterType = typeof FILTERS[number];
 
 export default function ContentPage() {
-  const [view, setView] = useState<"list" | "calendar">("list");
-  const [platformFilter, setPlatformFilter] = useState("all");
+  const [items, setItems]     = useState<ContentItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter]   = useState<FilterType>("all");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = platformFilter === "all"
-    ? INITIAL_CONTENT
-    : INITIAL_CONTENT.filter((c) => c.platform === platformFilter);
+  const load = useCallback(async (status: string) => {
+    setLoading(true);
+    const qs = status !== "all" ? `?status=${status}` : "";
+    try {
+      const res = await fetch(`/api/content${qs}`);
+      const data = await res.json();
+      setItems(Array.isArray(data) ? data : []);
+    } catch { setItems([]); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(filter); }, [filter, load]);
+
+  const getChannels  = (item: ContentItem) => { try { return JSON.parse(item.channelIds) as string[]; } catch { return []; } };
+  const getResults   = (item: ContentItem) => { try { return JSON.parse(item.publishResults) as Record<string, { success: boolean; postUrl?: string }>; } catch { return {}; } };
+
+  const stats = {
+    total:     items.length,
+    published: items.filter(i => i.status === "published").length,
+    scheduled: items.filter(i => i.status === "scheduled").length,
+    draft:     items.filter(i => i.status === "draft").length,
+  };
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header
-        title="Content"
-        subtitle="All content across projects"
-        actions={
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-blue-600 text-white text-xs rounded-md transition-colors">
-            <Plus size={13} /> New Content
-          </button>
-        }
-      />
+      <Header title="Content Calendar" subtitle="全媒体矩阵 · 发布管理" />
+      <div className="p-4 md:p-6 space-y-4">
 
-      <div className="p-6">
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {[
-            { label: "Published", count: INITIAL_CONTENT.filter(c => c.status === "published").length, color: "#10B981" },
-            { label: "Scheduled", count: INITIAL_CONTENT.filter(c => c.status === "scheduled").length, color: "#3B82F6" },
-            { label: "Draft", count: INITIAL_CONTENT.filter(c => c.status === "draft").length, color: "#8B8B9E" },
-            { label: "Total", count: INITIAL_CONTENT.length, color: "#8B5CF6" },
-          ].map((s) => (
+            { label: "总内容",  count: stats.total,     color: "#8B5CF6" },
+            { label: "已发布",  count: stats.published, color: "#10B981" },
+            { label: "待发布",  count: stats.scheduled, color: "#F59E0B" },
+            { label: "草稿",    count: stats.draft,     color: "#8B8B9E" },
+          ].map(s => (
             <div key={s.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-3 text-center">
               <div className="text-xl font-bold" style={{ color: s.color }}>{s.count}</div>
-              <div className="text-xs text-[#8B8B9E]">{s.label}</div>
+              <div className="text-xs text-[#8B8B9E] mt-0.5">{s.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Filters + View Toggle */}
-        <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setPlatformFilter("all")}
-              className={cn(
-                "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
-                platformFilter === "all"
-                  ? "bg-[#3B82F6] text-white"
-                  : "bg-[#12121A] border border-[#2A2A3A] text-[#8B8B9E] hover:text-white"
-              )}
-            >
-              All
+        {/* Filter tabs */}
+        <div className="flex gap-1 bg-[#12121A] border border-[#2A2A3A] rounded-xl p-1 overflow-x-auto scrollbar-none">
+          {FILTERS.map(tab => (
+            <button key={tab} onClick={() => setFilter(tab)}
+              className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0",
+                filter === tab ? "bg-[#3B82F6] text-white" : "text-[#8B8B9E] hover:text-white")}>
+              {tab === "all" ? "全部" : (STATUS_CONFIG[tab]?.label ?? tab)}
             </button>
-            {Object.entries(PLATFORM_ICONS).map(([platform, icon]) => (
-              <button
-                key={platform}
-                onClick={() => setPlatformFilter(platform)}
-                className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-colors",
-                  platformFilter === platform
-                    ? "bg-[#3B82F6] text-white"
-                    : "bg-[#12121A] border border-[#2A2A3A] text-[#8B8B9E] hover:text-white"
-                )}
-              >
-                {icon} {platform}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex gap-1">
-            <button
-              onClick={() => setView("list")}
-              className={cn(
-                "p-1.5 rounded-md transition-colors",
-                view === "list"
-                  ? "bg-[#1A1A24] text-white"
-                  : "text-[#5A5A6E] hover:text-white"
-              )}
-            >
-              <List size={15} />
-            </button>
-            <button
-              onClick={() => setView("calendar")}
-              className={cn(
-                "p-1.5 rounded-md transition-colors",
-                view === "calendar"
-                  ? "bg-[#1A1A24] text-white"
-                  : "text-[#5A5A6E] hover:text-white"
-              )}
-            >
-              <Calendar size={15} />
-            </button>
-          </div>
+          ))}
+          <button onClick={() => load(filter)}
+            className="ml-auto flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24] flex-shrink-0">
+            <RefreshCw size={11} />
+          </button>
         </div>
 
-        {/* Content List */}
-        <div className="space-y-3">
-          {filtered.map((item) => (
-            <div
-              key={item.id}
-              className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4 hover:border-[#3A3A4A] transition-colors cursor-pointer"
-            >
-              <div className="flex items-start gap-3">
-                <div className="text-2xl leading-none mt-0.5">
-                  {PLATFORM_ICONS[item.platform]}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="text-sm font-medium text-white leading-snug">
-                      {item.title}
+        {/* List */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-[#5A5A6E]">
+            <Loader2 size={18} className="animate-spin mr-2" /> 加载中…
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-20 border border-dashed border-[#2A2A3A] rounded-xl">
+            <Send size={24} className="mx-auto mb-3 text-[#3A3A4E]" />
+            <p className="text-[#8B8B9E] text-sm mb-1">暂无内容</p>
+            <p className="text-[#5A5A6E] text-xs">运行带有 📡 Publish 步骤的 Workflow 后，内容会自动出现在这里</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {items.map(item => {
+              const isExp    = expanded === item.id;
+              const chs      = getChannels(item);
+              const results  = getResults(item);
+              const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.draft;
+
+              return (
+                <div key={item.id} className="bg-[#12121A] border border-[#2A2A3A] rounded-xl overflow-hidden hover:border-[#3A3A4A] transition-colors">
+                  <div className="p-4 cursor-pointer" onClick={() => setExpanded(isExp ? null : item.id)}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="text-sm font-medium text-white truncate">{item.title || "无标题"}</span>
+                          <span className="text-xs text-[#5A5A6E] bg-[#1A1A24] px-1.5 py-0.5 rounded flex-shrink-0">
+                            {TYPE_LABELS[item.contentType] ?? item.contentType}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#8B8B9E] line-clamp-2 mb-2">{item.body}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {chs.map(ch => {
+                            const m = CHANNEL_META[ch];
+                            return m ? (
+                              <span key={ch} className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-[#1A1A24] text-[#8B8B9E]">
+                                {m.icon} <span className="hidden sm:inline">{m.name}</span>
+                              </span>
+                            ) : null;
+                          })}
+                          <span className="text-xs text-[#5A5A6E]">· {new Date(item.createdAt).toLocaleDateString("zh-CN")}</span>
+                          {item.workflowRunId && <span className="text-xs text-[#5A5A6E]">· Workflow</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium", statusCfg.cls)}>
+                          {statusCfg.icon} {statusCfg.label}
+                        </span>
+                        {isExp ? <ChevronUp size={13} className="text-[#5A5A6E]" /> : <ChevronDown size={13} className="text-[#5A5A6E]" />}
+                      </div>
                     </div>
-                    <span className={cn("text-xs px-2 py-0.5 rounded flex-shrink-0", statusColors[item.status])}>
-                      {item.status}
-                    </span>
                   </div>
 
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                    <span
-                      className="text-xs px-1.5 py-0.5 rounded"
-                      style={{
-                        backgroundColor: `${item.projectColor}20`,
-                        color: item.projectColor,
-                      }}
-                    >
-                      {item.project}
-                    </span>
-                    <span className="text-xs text-[#5A5A6E] capitalize">{item.type}</span>
-                    <span className="text-xs text-[#5A5A6E]">
-                      {item.agentEmoji} {item.agentName}
-                    </span>
-
-                    {item.scheduledFor && (
-                      <span className="text-xs text-[#3B82F6]">
-                        📅 {item.scheduledFor}
-                      </span>
-                    )}
-                    {item.publishedAt && (
-                      <span className="text-xs text-[#5A5A6E]">
-                        Published {item.publishedAt}
-                      </span>
-                    )}
-
-                    {item.metrics && (
-                      <span className="text-xs text-[#5A5A6E] ml-auto">
-                        👁 {item.metrics.views.toLocaleString()} · ❤️ {item.metrics.likes}
-                      </span>
-                    )}
-                  </div>
+                  {isExp && (
+                    <div className="border-t border-[#2A2A3A] p-4 bg-[#0E0E16] space-y-3">
+                      <div className="bg-[#12121A] rounded-lg p-3">
+                        <p className="text-xs text-[#C0C0D0] whitespace-pre-wrap">{item.body}</p>
+                      </div>
+                      {Object.keys(results).length > 0 && (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-[#8B8B9E] font-medium">发布结果</p>
+                          {Object.entries(results).map(([chId, r]) => {
+                            const m = CHANNEL_META[chId];
+                            return (
+                              <div key={chId} className="flex items-center gap-2 text-xs">
+                                <span>{m?.icon ?? "📡"}</span>
+                                <span className="text-[#8B8B9E]">{m?.name ?? chId}</span>
+                                {r.success ? (
+                                  <>
+                                    <CheckCircle size={11} className="text-green-400" />
+                                    {r.postUrl && <a href={r.postUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline truncate max-w-[200px]">{r.postUrl}</a>}
+                                  </>
+                                ) : <XCircle size={11} className="text-red-400" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="flex gap-4 text-xs text-[#5A5A6E] flex-wrap">
+                        <span>创建：{new Date(item.createdAt).toLocaleString("zh-CN")}</span>
+                        {item.scheduledFor && <span>计划：{new Date(item.scheduledFor).toLocaleString("zh-CN")}</span>}
+                        {item.publishedAt  && <span>发布：{new Date(item.publishedAt).toLocaleString("zh-CN")}</span>}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

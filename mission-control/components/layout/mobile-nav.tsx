@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CheckSquare, BarChart3, Bot, Workflow } from "lucide-react";
+import { LayoutDashboard, CheckSquare, BarChart3, Bot, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const mobileNavItems = [
   { href: "/dashboard",  label: "Home",      icon: LayoutDashboard },
   { href: "/tasks",      label: "Tasks",     icon: CheckSquare },
-  { href: "/workflows",  label: "Flows",     icon: Workflow },
+  { href: "/content",    label: "Content",   icon: Calendar },
   { href: "/agents",     label: "Agents",    icon: Bot },
   { href: "/analytics",  label: "Analytics", icon: BarChart3 },
 ];
