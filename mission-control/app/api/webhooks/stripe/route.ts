@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
         const onboardingWorkflows = await prisma.workflow.findMany({
           where: {
             status: "active",
-            name: { search: "onboarding" }, // 模糊匹配
+            name: { contains: "onboarding", mode: "insensitive" },
           },
           take: 1,
         });
