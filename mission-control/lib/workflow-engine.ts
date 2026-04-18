@@ -106,7 +106,7 @@ async function executeStep(
           dfm:      ["日报已生成，关键指标正常", "数据分析完成"],
           admin01:  ["系统巡检完成，状态正常 ✅", "所有服务运行正常"],
         };
-        const sims = fallbacks[agentId] || ["任务已完成"];
+        const sims: string[] = (fallbacks[agentId] ?? undefined) || ["任务已完成"];
         const sim  = sims[Math.floor(Math.random() * sims.length)];
         await addLog(runId, index, step.type, `✓ ${sim}（模拟）`, "success");
         return { success: true, output: sim };

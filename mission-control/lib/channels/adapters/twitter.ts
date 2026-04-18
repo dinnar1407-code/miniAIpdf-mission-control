@@ -87,7 +87,7 @@ export class TwitterAdapter extends BaseChannelAdapter {
     const timestamp = Math.floor(Date.now() / 1000).toString();
 
     // OAuth 1.0a parameters
-    const oauthParams = {
+    const oauthParams: Record<string, string> = {
       oauth_consumer_key: consumerKey,
       oauth_token: accessToken,
       oauth_signature_method: "HMAC-SHA1",
@@ -97,7 +97,7 @@ export class TwitterAdapter extends BaseChannelAdapter {
     };
 
     // Combine all parameters for signature base string
-    const allParams = { ...oauthParams, ...params };
+    const allParams: Record<string, string> = { ...oauthParams, ...params };
     const sortedParams = Object.keys(allParams)
       .sort()
       .map((key) => `${this.percentEncode(key)}=${this.percentEncode(allParams[key])}`)
@@ -121,7 +121,7 @@ export class TwitterAdapter extends BaseChannelAdapter {
       .digest("base64");
 
     // Build Authorization header
-    const authorizationParams = {
+    const authorizationParams: Record<string, string> = {
       ...oauthParams,
       oauth_signature: signature,
     };

@@ -228,7 +228,9 @@ export async function extractAndSaveMemory(
     }
 
     // 提取任何带有 [MEMORY] 标签的内容
-    const memoryMatches = Array.from(output.matchAll(/\[MEMORY:(\w+)\]\s*(.+?)(?:\n|$)/gi));
+    const memoryMatches = Array.from(
+      output.matchAll(/\[MEMORY:(\w+)\]\s*(.+?)(?:\n|$)/gi) as IterableIterator<RegExpExecArray>
+    );
     for (const match of memoryMatches) {
       const memType = match[1].toLowerCase();
       const memValue = match[2].trim();
