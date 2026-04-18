@@ -180,9 +180,7 @@ function ChannelCard({ ch, onSave, onTest }: {
 }
 
 // ── Telegram Notify Card ───────────────────────────────────────
-function TelegramNotifyCard({ onSave }: {
-  onSave: (channelId: string, enabled: boolean, creds: Record<string, string>) => Promise<void>;
-}) {
+function TelegramNotifyCard() {
   const [botToken, setBotToken] = useState("");
   const [chatId,   setChatId]   = useState("");
   const [enabled,  setEnabled]  = useState(false);
@@ -190,19 +188,22 @@ function TelegramNotifyCard({ onSave }: {
   const [testing,  setTesting]  = useState(false);
   const [testMsg,  setTestMsg]  = useState<string | null>(null);
 
-  // 加载已保存的配置
+  // 加载已保存的配置状态（不加载 token 值，保持密文）
   useEffect(() => {
-    fetch("/api/settings/channels")
-      .then(r => r.ok ? r.json() : [])
-      .then((chs: ChannelRecord[]) => {
-        const tg = chs.find(c => c.id === "telegram_notification");
-        if (tg) setEnabled(tg.enabled);
+    fetch("/api/settings/notify")
+      .then(r => r.ok ? r.json() : {})
+      .then((data: { enabled?: boolean; configured?: boolean }) => {
+        if (data.enabled !== undefined) setEnabled(data.enabled);
       });
   }, []);
 
   const save = async () => {
     setSaving(true);
-    await onSave("telegram_notification", enabled, { botToken, chatId });
+    await fetch("/api/settings/notify", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, botToken, chatId }),
+    });
     setSaving(false);
     setTestMsg(null);
   };
@@ -404,7 +405,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Telegram Notification */}
-            <TelegramNotifyCard onSave={saveChannel} />
+            <TelegramNotifyCard />
 
             <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl divide-y divide-[#2A2A3A]">
               {[

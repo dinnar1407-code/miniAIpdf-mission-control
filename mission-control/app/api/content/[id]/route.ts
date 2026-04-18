@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { channelRegistry } from "@/lib/channels/registry";
-import { ChannelId, PublishContent } from "@/lib/channels/types";
 
 // PATCH /api/content/[id] — 更新状态、审核、发布
 export async function PATCH(
