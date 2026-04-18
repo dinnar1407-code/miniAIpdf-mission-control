@@ -4,6 +4,8 @@ import { channelRegistry } from "@/lib/channels/registry";
 import { ChannelId, PublishContent } from "@/lib/channels/types";
 import { ask } from "@/lib/ai/claude-client";
 import { getAgentPrompt } from "@/lib/ai/agent-prompts";
+import { createApprovalRequest } from "@/lib/approval";
+import { getAgentMemoryContext, extractAndSaveMemory } from "@/lib/ai/agent-memory";
 
 // ==================== TELEGRAM HELPER ====================
 
@@ -80,9 +82,18 @@ async function executeStep(
       await addLog(runId, index, step.type, `🤖 ${agentId} 正在思考...`, "info");
 
       const systemPrompt = getAgentPrompt(agentId);
-      const userMessage  = prevOutput
+
+      // 执行前：获取 Agent 记忆上下文
+      const memoryContext = await getAgentMemoryContext(agentId);
+
+      let userMessage = prevOutput
         ? `上一步输出：\n${prevOutput}\n\n当前任务：${action}`
         : action;
+
+      // 构建增强 Prompt：附加记忆
+      if (memoryContext) {
+        userMessage = `${userMessage}\n\n${memoryContext}`;
+      }
 
       const output = await ask(systemPrompt, userMessage, "claude-haiku-4-5-20251001");
 
@@ -100,6 +111,9 @@ async function executeStep(
         await addLog(runId, index, step.type, `✓ ${sim}（模拟）`, "success");
         return { success: true, output: sim };
       }
+
+      // 执行后：从输出中提取并保存记忆
+      void extractAndSaveMemory(agentId, output, action);
 
       // 截取前 200 字用于日志展示
       const preview = output.length > 200 ? output.slice(0, 200) + "..." : output;
@@ -199,6 +213,50 @@ async function executeStep(
         tags:  [],
       };
 
+      // ── 如果需要审批，创建审批请求 ──
+      if (step.requireApproval === true) {
+        // 创建 ContentCalendar 记录
+        let contentId: string | undefined;
+        try {
+          const contentRecord = await prisma.contentCalendar.create({
+            data: {
+              title: step.label,
+              body,
+              contentType: step.contentType || "short_post",
+              status: "draft",
+              workflowRunId: runId,
+              channelIds: JSON.stringify(channels),
+            },
+          });
+          contentId = contentRecord.id;
+        } catch (err) {
+          await addLog(runId, index, step.type, `⚠ ContentCalendar 创建失败`, "warn");
+        }
+
+        // 创建审批请求并发送 Telegram
+        try {
+          const preview = body.length > 500 ? body.slice(0, 500) : body;
+          await createApprovalRequest({
+            workflowRunId: runId,
+            contentId,
+            type: "publish",
+            title: step.label,
+            preview,
+          });
+
+          await addLog(runId, index, step.type, `📋 审批请求已发送至 Telegram`, "info");
+          return {
+            success: true,
+            output: "Approval request sent - awaiting response",
+          };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          await addLog(runId, index, step.type, `⚠ 审批请求创建失败: ${message}`, "warn");
+          return { success: false, error: `Approval request failed: ${message}` };
+        }
+      }
+
+      // ── 无需审批，直接发布 ──
       const results: string[] = [];
       for (const channelId of channels) {
         const adapter = channelRegistry.get(channelId);

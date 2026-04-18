@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/header";
 import { useEffect, useState, useCallback } from "react";
 import {
   Plus, Edit2, Archive, Key, Copy, EyeOff, Trash2, CheckCircle,
-  Loader2, Radio, Zap, Settings2, ChevronDown, ChevronUp, FlaskConical,
+  Loader2, Radio, Zap, Settings2, ChevronDown, ChevronUp, FlaskConical, Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +30,7 @@ interface ChannelRecord {
   testedAt: string | null; testResult: string | null;
 }
 
-type Tab = "projects" | "channels" | "ai" | "apikeys" | "system";
+type Tab = "projects" | "channels" | "integrations" | "ai" | "apikeys";
 
 // ── Channel credential fields per channel ──────────────────────
 const CHANNEL_FIELDS: Record<string, { key: string; label: string; placeholder: string; secret?: boolean }[]> = {
@@ -64,6 +64,77 @@ const CHANNEL_FIELDS: Record<string, { key: string; label: string; placeholder: 
     { key: "accessToken",  label: "OAuth Access Token", placeholder: "ya29...", secret: true },
   ],
 };
+
+// ── Integration Config ─────────────────────────────────────────
+interface Integration {
+  id: string;
+  name: string;
+  icon: string;
+  priority: "P0" | "P1";
+  description: string;
+  envVars: string[];
+  webhookUrl?: string;
+  docsUrl: string;
+}
+
+const INTEGRATIONS: Integration[] = [
+  {
+    id: "stripe",
+    name: "Stripe",
+    icon: "💳",
+    priority: "P0",
+    description: "实时 MRR、订阅数、付款事件",
+    envVars: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+    webhookUrl: "/api/webhooks/stripe",
+    docsUrl: "https://dashboard.stripe.com/webhooks",
+  },
+  {
+    id: "gsc",
+    name: "Google Search Console",
+    icon: "🔍",
+    priority: "P0",
+    description: "关键词排名、点击量、收录状态",
+    envVars: ["GOOGLE_SERVICE_ACCOUNT_KEY", "GSC_SITE_URL"],
+    docsUrl: "https://search.google.com/search-console",
+  },
+  {
+    id: "ga",
+    name: "Google Analytics 4",
+    icon: "📊",
+    priority: "P0",
+    description: "流量来源、用户数、转化路径",
+    envVars: ["GOOGLE_SERVICE_ACCOUNT_KEY", "GA_PROPERTY_ID"],
+    docsUrl: "https://analytics.google.com",
+  },
+  {
+    id: "telegram",
+    name: "Telegram Bot",
+    icon: "✈️",
+    priority: "P0",
+    description: "双向通知、审批指令",
+    envVars: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_WEBHOOK_SECRET"],
+    webhookUrl: "/api/webhooks/telegram",
+    docsUrl: "https://t.me/BotFather",
+  },
+  {
+    id: "twitter",
+    name: "Twitter / X",
+    icon: "𝕏",
+    priority: "P1",
+    description: "自动发推文、数据回读",
+    envVars: ["TWITTER_API_KEY", "TWITTER_API_SECRET", "TWITTER_ACCESS_TOKEN", "TWITTER_ACCESS_SECRET"],
+    docsUrl: "https://developer.twitter.com",
+  },
+  {
+    id: "wordpress",
+    name: "WordPress",
+    icon: "📰",
+    priority: "P1",
+    description: "博客文章自动发布",
+    envVars: ["WORDPRESS_SITE_URL", "WORDPRESS_USERNAME", "WORDPRESS_APP_PASSWORD"],
+    docsUrl: "https://wordpress.org/documentation/article/application-passwords",
+  },
+];
 
 // ── Channel Card ───────────────────────────────────────────────
 function ChannelCard({ ch, onSave, onTest }: {
@@ -175,6 +246,107 @@ function ChannelCard({ ch, onSave, onTest }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Integration Card ──────────────────────────────────────────
+function IntegrationCard({ integration }: { integration: Integration }) {
+  const [configStatus, setConfigStatus] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Load integration status
+    fetch("/api/settings/integrations/status")
+      .then(r => r.ok ? r.json() : {})
+      .then((data: Record<string, { configured: boolean }>) => {
+        const status: Record<string, boolean> = {};
+        integration.envVars.forEach(envVar => {
+          // Check if integration is configured
+          status[envVar] = data[integration.id]?.configured || false;
+        });
+        setConfigStatus(status);
+        setLoading(false);
+      })
+      .catch(() => {
+        const status: Record<string, boolean> = {};
+        integration.envVars.forEach(envVar => {
+          status[envVar] = false;
+        });
+        setConfigStatus(status);
+        setLoading(false);
+      });
+  }, [integration.id, integration.envVars]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(text);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  return (
+    <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg flex-shrink-0" style={{ backgroundColor: "#3B82F6" + "20" }}>
+          {integration.icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-white">{integration.name}</span>
+            <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium",
+              integration.priority === "P0" ? "bg-red-500/15 text-red-400" : "bg-yellow-500/15 text-yellow-400")}>
+              {integration.priority}
+            </span>
+          </div>
+          <p className="text-xs text-[#8B8B9E] mt-0.5">{integration.description}</p>
+        </div>
+      </div>
+
+      {/* Environment Variables */}
+      <div className="space-y-2">
+        <p className="text-xs text-[#8B8B9E] font-medium">必填环境变量</p>
+        {integration.envVars.map(envVar => (
+          <div key={envVar} className="flex items-center gap-2 p-2 bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg">
+            <code className="text-xs text-[#8B8B9E] font-mono flex-1 truncate">{envVar}</code>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {loading ? (
+                <Loader2 size={12} className="text-[#5A5A6E] animate-spin" />
+              ) : (
+                <span className="text-xs text-[#5A5A6E]">
+                  {configStatus[envVar] ? <span className="text-green-400">✓ 已配置</span> : <span className="text-[#5A5A6E]">○ 未配置</span>}
+                </span>
+              )}
+              <button onClick={() => copyToClipboard(envVar)}
+                className="p-1 rounded text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24] transition-colors">
+                {copied === envVar ? <CheckCircle size={12} className="text-green-400" /> : <Copy size={12} />}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Webhook URL */}
+      {integration.webhookUrl && (
+        <div className="space-y-2">
+          <p className="text-xs text-[#8B8B9E] font-medium">Webhook URL</p>
+          <div className="flex items-center gap-2 p-2 bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg">
+            <code className="text-xs text-[#8B8B9E] font-mono flex-1 truncate">{integration.webhookUrl}</code>
+            <button onClick={() => copyToClipboard(integration.webhookUrl!)}
+              className="p-1 rounded text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24] transition-colors">
+              {copied === integration.webhookUrl ? <CheckCircle size={12} className="text-green-400" /> : <Copy size={12} />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Documentation Link */}
+      <a href={integration.docsUrl} target="_blank" rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A24] hover:bg-[#2A2A3A] text-[#8B8B9E] text-xs rounded-lg transition-colors">
+        📖 查看文档
+      </a>
     </div>
   );
 }
@@ -359,10 +531,11 @@ export default function SettingsPage() {
   }, []);
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "channels",  label: "渠道",    icon: <Radio size={13} /> },
-    { id: "ai",        label: "AI 引擎", icon: <Zap size={13} /> },
-    { id: "apikeys",   label: "API Keys", icon: <Key size={13} /> },
-    { id: "projects",  label: "项目",    icon: <Settings2 size={13} /> },
+    { id: "channels",      label: "渠道",    icon: <Radio size={13} /> },
+    { id: "integrations",  label: "集成",    icon: <Plug size={13} /> },
+    { id: "ai",            label: "AI 引擎", icon: <Zap size={13} /> },
+    { id: "apikeys",       label: "API Keys", icon: <Key size={13} /> },
+    { id: "projects",      label: "项目",    icon: <Settings2 size={13} /> },
   ];
 
   return (
@@ -393,6 +566,21 @@ export default function SettingsPage() {
             {channels.map(ch => (
               <ChannelCard key={ch.id} ch={ch} onSave={saveChannel} onTest={testChannel} />
             ))}
+          </div>
+        )}
+
+        {/* ── INTEGRATIONS TAB ─────────────────────────────── */}
+        {tab === "integrations" && (
+          <div className="space-y-4">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-white">第三方集成</h2>
+              <p className="text-xs text-[#8B8B9E] mt-1">配置外部服务的 API 凭证，即可自动获取数据和推送事件</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {INTEGRATIONS.map(integration => (
+                <IntegrationCard key={integration.id} integration={integration} />
+              ))}
+            </div>
           </div>
         )}
 

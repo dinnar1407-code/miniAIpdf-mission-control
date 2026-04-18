@@ -51,6 +51,7 @@ interface DashboardStats {
   completedRunsThisWeek?: number;
   contentPublished?: number;
   contentDraft?: number;
+  pendingApprovals?: number;
 }
 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
@@ -216,6 +217,21 @@ export default function DashboardPage() {
             subtitle={`草稿 ${stats.contentDraft ?? 0} 篇`}
           />
         </div>
+
+        {/* Pending Approvals Card */}
+        {(stats.pendingApprovals ?? 0) > 0 && (
+          <div className="max-w-md">
+            <StatCard
+              label="待审批"
+              value={String(stats.pendingApprovals)}
+              change="需要处理"
+              changeType="neutral"
+              icon="⏳"
+              color="#F59E0B"
+              subtitle="Telegram /approve_xxx"
+            />
+          </div>
+        )}
 
         {/* Activity + Agents */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

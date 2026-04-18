@@ -18,6 +18,8 @@ export async function GET() {
       contentPublished,
       contentDraft,
       contentScheduled,
+      kpiSnapshots,
+      approvalCount,
     ] = await Promise.all([
       prisma.task.count(),
       prisma.task.count({ where: { status: { notIn: ["done", "cancelled"] } } }),
@@ -49,15 +51,32 @@ export async function GET() {
       prisma.contentCalendar.count({ where: { status: "published" } }),
       prisma.contentCalendar.count({ where: { status: "draft" } }),
       prisma.contentCalendar.count({ where: { status: "scheduled" } }),
+      // KPI snapshots
+      prisma.kpiSnapshot.findMany({
+        orderBy: { date: "desc" },
+        take: 50,
+        where: {
+          metric: { in: ["mrr", "users", "signups", "pageviews", "api_calls", "active_subscriptions"] },
+        },
+      }),
+      // Pending approvals
+      prisma.approvalRequest.count({ where: { status: "pending" } }),
     ]);
 
-    // Aggregate MRR and users from latest metrics
-    const mrrTotal = metrics
-      .filter(m => m.metric === "mrr")
-      .reduce((sum, m) => sum + m.value, 0);
-    const usersTotal = metrics
-      .filter(m => m.metric === "users")
-      .reduce((sum, m) => sum + m.value, 0);
+    // Aggregate MRR and users from KPI snapshots first, fall back to MetricSnapshot
+    const latestMrr = kpiSnapshots
+      .filter(k => k.metric === "mrr")
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.value
+      ?? metrics
+        .filter(m => m.metric === "mrr")
+        .reduce((sum, m) => sum + m.value, 0);
+
+    const latestUsers = kpiSnapshots
+      .filter(k => k.metric === "users")
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]?.value
+      ?? metrics
+        .filter(m => m.metric === "users")
+        .reduce((sum, m) => sum + m.value, 0);
 
     const activeAgents = agents.filter(a => a.status === "active").length;
 
@@ -70,9 +89,9 @@ export async function GET() {
 
     const data = {
       stats: {
-        mrr:             Math.round(mrrTotal) || 2327,
+        mrr:             Math.round(latestMrr) || 2327,
         mrrChange:       12,
-        users:           Math.round(usersTotal) || 4494,
+        users:           Math.round(latestUsers) || 4494,
         usersChange:     8,
         openTasks,
         totalTasks,
@@ -85,7 +104,16 @@ export async function GET() {
         contentPublished,
         contentDraft,
         contentScheduled,
+        // Approval stats
+        pendingApprovals: approvalCount,
       },
+      kpiHistory: kpiSnapshots.slice(0, 20).map(k => ({
+        metric: k.metric,
+        value: k.value,
+        delta: k.delta,
+        date: k.date,
+        source: k.source,
+      })),
       recentActivity: recentLogs.map(log => ({
         id:           log.id,
         agentName:    log.agent?.name || "System",
