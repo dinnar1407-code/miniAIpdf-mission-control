@@ -208,7 +208,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label="内容已发布"
-            value={stats.contentPublished ?? 0}
+            value={String(stats.contentPublished ?? 0)}
             change="全渠道"
             changeType="up"
             icon="📡"
