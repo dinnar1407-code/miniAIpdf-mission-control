@@ -105,10 +105,10 @@ export async function GET(req: NextRequest) {
 
     for (const [name, url] of Object.entries(apis)) {
       try {
-        const resp = await fetch(url, {
-          method: "HEAD",
-          timeout: 5000,
-        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        const resp = await fetch(url, { method: "HEAD", signal: controller.signal });
+        clearTimeout(timer);
         apiStatus[name] = resp.ok || resp.status < 500;
       } catch {
         apiStatus[name] = false;
