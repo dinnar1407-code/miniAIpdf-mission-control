@@ -2,7 +2,10 @@
 
 import { Header } from "@/components/layout/header";
 import { useEffect, useState, useCallback } from "react";
-import { RefreshCw, Loader2, CheckCircle, Clock, XCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  RefreshCw, Loader2, CheckCircle, Clock, XCircle,
+  Send, ChevronDown, ChevronUp, ThumbsUp, Rocket,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ContentItem {
@@ -40,16 +43,17 @@ const FILTERS = ["all", "draft", "approved", "scheduled", "published", "failed"]
 type FilterType = typeof FILTERS[number];
 
 export default function ContentPage() {
-  const [items, setItems]     = useState<ContentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter]   = useState<FilterType>("all");
+  const [items,    setItems]    = useState<ContentItem[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [filter,   setFilter]   = useState<FilterType>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [acting,   setActing]   = useState<Record<string, "approving" | "publishing">>({});
 
   const load = useCallback(async (status: string) => {
     setLoading(true);
     const qs = status !== "all" ? `?status=${status}` : "";
     try {
-      const res = await fetch(`/api/content${qs}`);
+      const res  = await fetch(`/api/content${qs}`);
       const data = await res.json();
       setItems(Array.isArray(data) ? data : []);
     } catch { setItems([]); }
@@ -58,8 +62,35 @@ export default function ContentPage() {
 
   useEffect(() => { load(filter); }, [filter, load]);
 
-  const getChannels  = (item: ContentItem) => { try { return JSON.parse(item.channelIds) as string[]; } catch { return []; } };
-  const getResults   = (item: ContentItem) => { try { return JSON.parse(item.publishResults) as Record<string, { success: boolean; postUrl?: string }>; } catch { return {}; } };
+  const getChannels = (item: ContentItem) => {
+    try { return JSON.parse(item.channelIds) as string[]; } catch { return []; }
+  };
+  const getResults = (item: ContentItem) => {
+    try { return JSON.parse(item.publishResults) as Record<string, { success: boolean; postUrl?: string; error?: string }>; }
+    catch { return {}; }
+  };
+
+  // 审核通过（draft → approved）
+  const approveItem = async (id: string) => {
+    setActing(a => ({ ...a, [id]: "approving" }));
+    await fetch(`/api/content/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "approved" }),
+    });
+    await load(filter);
+    setActing(a => { const n = { ...a }; delete n[id]; return n; });
+  };
+
+  // 立即发布（approved → published）
+  const publishItem = async (id: string) => {
+    setActing(a => ({ ...a, [id]: "publishing" }));
+    try {
+      await fetch(`/api/content/${id}/publish`, { method: "POST" });
+    } catch {}
+    await load(filter);
+    setActing(a => { const n = { ...a }; delete n[id]; return n; });
+  };
 
   const stats = {
     total:     items.length,
@@ -92,8 +123,10 @@ export default function ContentPage() {
         <div className="flex gap-1 bg-[#12121A] border border-[#2A2A3A] rounded-xl p-1 overflow-x-auto scrollbar-none">
           {FILTERS.map(tab => (
             <button key={tab} onClick={() => setFilter(tab)}
-              className={cn("px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0",
-                filter === tab ? "bg-[#3B82F6] text-white" : "text-[#8B8B9E] hover:text-white")}>
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0",
+                filter === tab ? "bg-[#3B82F6] text-white" : "text-[#8B8B9E] hover:text-white"
+              )}>
               {tab === "all" ? "全部" : (STATUS_CONFIG[tab]?.label ?? tab)}
             </button>
           ))}
@@ -112,21 +145,28 @@ export default function ContentPage() {
           <div className="text-center py-20 border border-dashed border-[#2A2A3A] rounded-xl">
             <Send size={24} className="mx-auto mb-3 text-[#3A3A4E]" />
             <p className="text-[#8B8B9E] text-sm mb-1">暂无内容</p>
-            <p className="text-[#5A5A6E] text-xs">运行带有 📡 Publish 步骤的 Workflow 后，内容会自动出现在这里</p>
+            <p className="text-[#5A5A6E] text-xs">
+              运行带有 📡 Publish 步骤的 Workflow 后，内容会自动出现在这里
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
             {items.map(item => {
-              const isExp    = expanded === item.id;
-              const chs      = getChannels(item);
-              const results  = getResults(item);
+              const isExp     = expanded === item.id;
+              const chs       = getChannels(item);
+              const results   = getResults(item);
               const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.draft;
+              const isActing  = !!acting[item.id];
 
               return (
                 <div key={item.id} className="bg-[#12121A] border border-[#2A2A3A] rounded-xl overflow-hidden hover:border-[#3A3A4A] transition-colors">
-                  <div className="p-4 cursor-pointer" onClick={() => setExpanded(isExp ? null : item.id)}>
+                  {/* Header row */}
+                  <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
+                      <div
+                        className="flex-1 min-w-0 cursor-pointer"
+                        onClick={() => setExpanded(isExp ? null : item.id)}
+                      >
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-sm font-medium text-white truncate">{item.title || "无标题"}</span>
                           <span className="text-xs text-[#5A5A6E] bg-[#1A1A24] px-1.5 py-0.5 rounded flex-shrink-0">
@@ -143,24 +183,72 @@ export default function ContentPage() {
                               </span>
                             ) : null;
                           })}
-                          <span className="text-xs text-[#5A5A6E]">· {new Date(item.createdAt).toLocaleDateString("zh-CN")}</span>
-                          {item.workflowRunId && <span className="text-xs text-[#5A5A6E]">· Workflow</span>}
+                          <span className="text-xs text-[#5A5A6E]">
+                            · {new Date(item.createdAt).toLocaleDateString("zh-CN")}
+                          </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium", statusCfg.cls)}>
-                          {statusCfg.icon} {statusCfg.label}
-                        </span>
-                        {isExp ? <ChevronUp size={13} className="text-[#5A5A6E]" /> : <ChevronDown size={13} className="text-[#5A5A6E]" />}
+
+                      {/* Right: status + action buttons */}
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium",
+                            statusCfg.cls
+                          )}>
+                            {statusCfg.icon} {statusCfg.label}
+                          </span>
+                          <button
+                            onClick={() => setExpanded(isExp ? null : item.id)}
+                            className="text-[#5A5A6E]"
+                          >
+                            {isExp ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </button>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex gap-1.5">
+                          {item.status === "draft" && (
+                            <button
+                              onClick={() => approveItem(item.id)}
+                              disabled={isActing}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                            >
+                              {acting[item.id] === "approving"
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <ThumbsUp size={10} />
+                              }
+                              审核通过
+                            </button>
+                          )}
+
+                          {(item.status === "approved" || item.status === "failed") && (
+                            <button
+                              onClick={() => publishItem(item.id)}
+                              disabled={isActing}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs bg-[#EC4899]/10 text-[#EC4899] border border-[#EC4899]/30 hover:bg-[#EC4899]/20 transition-colors disabled:opacity-50"
+                            >
+                              {acting[item.id] === "publishing"
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <Rocket size={10} />
+                              }
+                              立即发布
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
 
+                  {/* Expanded panel */}
                   {isExp && (
                     <div className="border-t border-[#2A2A3A] p-4 bg-[#0E0E16] space-y-3">
+                      {/* Full body */}
                       <div className="bg-[#12121A] rounded-lg p-3">
-                        <p className="text-xs text-[#C0C0D0] whitespace-pre-wrap">{item.body}</p>
+                        <p className="text-xs text-[#C0C0D0] whitespace-pre-wrap leading-relaxed">{item.body}</p>
                       </div>
+
+                      {/* Publish results */}
                       {Object.keys(results).length > 0 && (
                         <div className="space-y-1.5">
                           <p className="text-xs text-[#8B8B9E] font-medium">发布结果</p>
@@ -172,19 +260,42 @@ export default function ContentPage() {
                                 <span className="text-[#8B8B9E]">{m?.name ?? chId}</span>
                                 {r.success ? (
                                   <>
-                                    <CheckCircle size={11} className="text-green-400" />
-                                    {r.postUrl && <a href={r.postUrl} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline truncate max-w-[200px]">{r.postUrl}</a>}
+                                    <CheckCircle size={11} className="text-green-400 flex-shrink-0" />
+                                    {r.postUrl && (
+                                      <a
+                                        href={r.postUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-400 hover:underline truncate max-w-[200px]"
+                                      >
+                                        {r.postUrl}
+                                      </a>
+                                    )}
                                   </>
-                                ) : <XCircle size={11} className="text-red-400" />}
+                                ) : (
+                                  <>
+                                    <XCircle size={11} className="text-red-400 flex-shrink-0" />
+                                    {r.error && <span className="text-red-400/70 truncate">{r.error}</span>}
+                                  </>
+                                )}
                               </div>
                             );
                           })}
                         </div>
                       )}
+
+                      {/* Timestamps */}
                       <div className="flex gap-4 text-xs text-[#5A5A6E] flex-wrap">
                         <span>创建：{new Date(item.createdAt).toLocaleString("zh-CN")}</span>
-                        {item.scheduledFor && <span>计划：{new Date(item.scheduledFor).toLocaleString("zh-CN")}</span>}
-                        {item.publishedAt  && <span>发布：{new Date(item.publishedAt).toLocaleString("zh-CN")}</span>}
+                        {item.scheduledFor && (
+                          <span>计划：{new Date(item.scheduledFor).toLocaleString("zh-CN")}</span>
+                        )}
+                        {item.publishedAt && (
+                          <span>发布：{new Date(item.publishedAt).toLocaleString("zh-CN")}</span>
+                        )}
+                        {item.workflowRunId && (
+                          <span>来源：Workflow Run</span>
+                        )}
                       </div>
                     </div>
                   )}

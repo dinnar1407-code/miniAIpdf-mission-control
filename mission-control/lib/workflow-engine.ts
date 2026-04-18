@@ -8,8 +8,23 @@ import { getAgentPrompt } from "@/lib/ai/agent-prompts";
 // ==================== TELEGRAM HELPER ====================
 
 async function sendTelegram(text: string): Promise<boolean> {
-  const token  = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  // 优先用环境变量，其次读 DB 中的 telegram_notification 配置
+  let token  = process.env.TELEGRAM_BOT_TOKEN;
+  let chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId) {
+    try {
+      const cred = await prisma.channelCredential.findUnique({
+        where: { channelId: "telegram_notification" },
+      });
+      if (cred && cred.enabled) {
+        const c = JSON.parse(cred.credentials) as Record<string, string>;
+        token  = token  || c.botToken;
+        chatId = chatId || c.chatId;
+      }
+    } catch {}
+  }
+
   if (!token || !chatId) return false;
 
   try {
@@ -17,8 +32,8 @@ async function sendTelegram(text: string): Promise<boolean> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: chatId,
-        text: `🤖 *Jarvis Mission Control*\n\n${text}`,
+        chat_id:    chatId,
+        text:       `🤖 *Jarvis Mission Control*\n\n${text}`,
         parse_mode: "Markdown",
       }),
     });

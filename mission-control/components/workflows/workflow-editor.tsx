@@ -27,6 +27,7 @@ const TRIGGER_OPTIONS: { type: TriggerType; label: string; icon: React.ReactNode
 
 const STEP_PALETTE: { type: StepType; label: string }[] = [
   { type: "agent",       label: "Agent Task" },
+  { type: "publish",     label: "Publish" },
   { type: "http",        label: "HTTP Request" },
   { type: "wait",        label: "Wait" },
   { type: "condition",   label: "Condition" },

@@ -179,6 +179,123 @@ function ChannelCard({ ch, onSave, onTest }: {
   );
 }
 
+// ── Telegram Notify Card ───────────────────────────────────────
+function TelegramNotifyCard({ onSave }: {
+  onSave: (channelId: string, enabled: boolean, creds: Record<string, string>) => Promise<void>;
+}) {
+  const [botToken, setBotToken] = useState("");
+  const [chatId,   setChatId]   = useState("");
+  const [enabled,  setEnabled]  = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [testing,  setTesting]  = useState(false);
+  const [testMsg,  setTestMsg]  = useState<string | null>(null);
+
+  // 加载已保存的配置
+  useEffect(() => {
+    fetch("/api/settings/channels")
+      .then(r => r.ok ? r.json() : [])
+      .then((chs: ChannelRecord[]) => {
+        const tg = chs.find(c => c.id === "telegram_notification");
+        if (tg) setEnabled(tg.enabled);
+      });
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    await onSave("telegram_notification", enabled, { botToken, chatId });
+    setSaving(false);
+    setTestMsg(null);
+  };
+
+  const test = async () => {
+    setTesting(true);
+    try {
+      const res = await fetch("https://api.telegram.org/bot" + botToken + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "🤖 *Jarvis Mission Control* — Telegram 通知测试成功 ✅",
+          parse_mode: "Markdown",
+        }),
+      });
+      setTestMsg(res.ok ? "ok" : "发送失败，请检查 Bot Token 和 Chat ID");
+    } catch {
+      setTestMsg("网络错误");
+    }
+    setTesting(false);
+  };
+
+  return (
+    <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">✈️</span>
+          <div>
+            <div className="text-sm font-medium text-white">Telegram 通知</div>
+            <div className="text-xs text-[#8B8B9E]">Workflow 完成时推送到你的 Telegram</div>
+          </div>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <div className="relative">
+            <input type="checkbox" className="sr-only" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+            <div className={cn("w-9 h-5 rounded-full transition-colors", enabled ? "bg-[#3B82F6]" : "bg-[#2A2A3A]")}>
+              <div className={cn("w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform", enabled ? "translate-x-4" : "translate-x-0.5")} />
+            </div>
+          </div>
+          <span className="text-xs text-[#8B8B9E]">{enabled ? "启用" : "关闭"}</span>
+        </label>
+      </div>
+
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs text-[#8B8B9E] mb-1 block">Bot Token</label>
+          <input
+            type="password"
+            value={botToken}
+            onChange={e => setBotToken(e.target.value)}
+            placeholder="8574830800:AAH..."
+            className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#3A3A4E] focus:outline-none focus:border-[#3B82F6] font-mono"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-[#8B8B9E] mb-1 block">Chat ID（你的个人 ID 或群组 ID）</label>
+          <input
+            type="text"
+            value={chatId}
+            onChange={e => setChatId(e.target.value)}
+            placeholder="123456789"
+            className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#3A3A4E] focus:outline-none focus:border-[#3B82F6] font-mono"
+          />
+          <p className="text-xs text-[#5A5A6E] mt-1">
+            向 <span className="text-white">@userinfobot</span> 发送任意消息即可获取你的 Chat ID
+          </p>
+        </div>
+      </div>
+
+      {testMsg && (
+        <div className={cn("text-xs px-3 py-2 rounded-lg",
+          testMsg === "ok" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400")}>
+          {testMsg === "ok" ? "✓ 测试消息发送成功！" : `✗ ${testMsg}`}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <button onClick={test} disabled={testing || !botToken || !chatId}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A24] hover:bg-[#2A2A3A] text-[#8B8B9E] text-xs rounded-lg transition-colors disabled:opacity-40">
+          {testing ? <Loader2 size={11} className="animate-spin" /> : <FlaskConical size={11} />}
+          发送测试
+        </button>
+        <button onClick={save} disabled={saving}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-blue-500 text-white text-xs rounded-lg transition-colors ml-auto">
+          {saving ? <Loader2 size={11} className="animate-spin" /> : null}
+          保存
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Settings Page ─────────────────────────────────────────
 export default function SettingsPage() {
   const [tab, setTab]         = useState<Tab>("channels");
@@ -285,6 +402,9 @@ export default function SettingsPage() {
               <h2 className="text-sm font-semibold text-white">AI 引擎配置</h2>
               <p className="text-xs text-[#8B8B9E] mt-1">Workflow 中 Agent 步骤的 AI 驱动设置</p>
             </div>
+
+            {/* Telegram Notification */}
+            <TelegramNotifyCard onSave={saveChannel} />
 
             <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl divide-y divide-[#2A2A3A]">
               {[

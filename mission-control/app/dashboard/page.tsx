@@ -46,6 +46,11 @@ interface DashboardStats {
   users?: number;
   usersChange?: number;
   agentHours?: number;
+  // real data
+  workflowRunsThisWeek?: number;
+  completedRunsThisWeek?: number;
+  contentPublished?: number;
+  contentDraft?: number;
 }
 
 const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
@@ -68,7 +73,9 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5,
     newAlerts: 0, mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8, agentHours: 142,
+    workflowRunsThisWeek: 0, completedRunsThisWeek: 0, contentPublished: 0,
   });
+  const [recentRuns, setRecentRuns] = useState<{ id: string; name: string; status: string; time: string }[]>([]);
   const [live, setLive] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const sseRef = useRef<EventSource | null>(null);
@@ -82,6 +89,7 @@ export default function DashboardPage() {
           setStats(prev => ({ ...prev, ...data.stats }));
           setLastUpdated(new Date());
         }
+        if (data?.recentRuns) setRecentRuns(data.recentRuns);
       })
       .catch(() => {});
   }, []);
@@ -152,7 +160,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           <StatCard
             label="Monthly Revenue"
             value={`$${(stats.mrr || 0).toLocaleString()}`}
@@ -190,13 +198,22 @@ export default function DashboardPage() {
             subtitle={`${stats.totalAgents - stats.activeAgents} idle`}
           />
           <StatCard
-            label="Agent Hours"
-            value={`${stats.agentHours || 0}h`}
-            change="+22%"
+            label="本周 Workflows"
+            value={`${stats.completedRunsThisWeek ?? 0}/${stats.workflowRunsThisWeek ?? 0}`}
+            change={stats.workflowRunsThisWeek ? `${Math.round(((stats.completedRunsThisWeek ?? 0) / stats.workflowRunsThisWeek) * 100)}%` : "0%"}
             changeType="up"
-            icon="⏰"
+            icon="⚡"
             color="#F97316"
-            subtitle="This week"
+            subtitle="完成 / 触发"
+          />
+          <StatCard
+            label="内容已发布"
+            value={stats.contentPublished ?? 0}
+            change="全渠道"
+            changeType="up"
+            icon="📡"
+            color="#EC4899"
+            subtitle={`草稿 ${stats.contentDraft ?? 0} 篇`}
           />
         </div>
 
@@ -209,6 +226,34 @@ export default function DashboardPage() {
             <AgentStatusMini />
           </div>
         </div>
+
+        {/* Recent Workflow Runs */}
+        {recentRuns.length > 0 && (
+          <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-white">最近 Workflow 运行</h3>
+              <a href="/workflows" className="text-xs text-[#3B82F6] hover:underline">查看全部 →</a>
+            </div>
+            <div className="space-y-2">
+              {recentRuns.map(run => (
+                <div key={run.id} className="flex items-center gap-3 text-xs">
+                  <span className={
+                    run.status === "completed" ? "w-2 h-2 rounded-full bg-[#10B981] flex-shrink-0" :
+                    run.status === "running"   ? "w-2 h-2 rounded-full bg-[#3B82F6] animate-pulse flex-shrink-0" :
+                    run.status === "failed"    ? "w-2 h-2 rounded-full bg-[#EF4444] flex-shrink-0" :
+                    "w-2 h-2 rounded-full bg-[#5A5A6E] flex-shrink-0"
+                  } />
+                  <span className="text-white flex-1 truncate">{run.name}</span>
+                  <span className={
+                    run.status === "completed" ? "text-[#10B981]" :
+                    run.status === "failed"    ? "text-[#EF4444]" : "text-[#5A5A6E]"
+                  }>{run.status}</span>
+                  <span className="text-[#5A5A6E]">{run.time}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Traffic Chart + Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

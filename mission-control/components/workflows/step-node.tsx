@@ -24,7 +24,20 @@ const stepColors: Record<string, string> = {
   notify:      "border-[#10B981] bg-[#10B98110]",
   create_task: "border-[#10B981] bg-[#10B98110]",
   log:         "border-[#5A5A6E] bg-[#5A5A6E10]",
+  publish:     "border-[#EC4899] bg-[#EC489910]",
 };
+
+// 所有已注册渠道（与 registry 保持一致）
+const ALL_CHANNELS = [
+  { id: "telegram_channel", name: "Telegram",     icon: "✈️" },
+  { id: "twitter",          name: "Twitter/X",    icon: "🐦" },
+  { id: "linkedin",         name: "LinkedIn",     icon: "💼" },
+  { id: "wordpress",        name: "WordPress",    icon: "📰" },
+  { id: "wechat",           name: "微信公众号",    icon: "💬" },
+  { id: "xiaohongshu",      name: "小红书",        icon: "📕" },
+  { id: "youtube",          name: "YouTube",      icon: "▶️" },
+  { id: "medium",           name: "Medium",       icon: "✍️" },
+];
 
 const runStatusStyles: Record<string, string> = {
   running:   "ring-2 ring-[#3B82F6] ring-offset-1 ring-offset-[#0A0A0F]",
@@ -77,6 +90,11 @@ export function StepNode({
               {step.type === "log" && step.message}
               {step.type === "create_task" && step.action}
               {step.type === "condition" && step.condition}
+              {step.type === "publish" && (() => {
+                const chs = (step.publishChannels || []);
+                const icons = chs.map(id => ALL_CHANNELS.find(c => c.id === id)?.icon || "📡").join(" ");
+                return `${icons || "📡"} ${chs.length} 个渠道 · ${step.contentSource === "prev_output" ? "上一步输出" : "静态内容"}${step.requireApproval ? " · 需审核" : ""}`;
+              })()}
             </div>
           </div>
 
@@ -223,6 +241,119 @@ export function StepNode({
                   className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#3B82F6]"
                 />
               </div>
+            )}
+
+            {step.type === "publish" && (
+              <>
+                {/* 渠道多选 */}
+                <div>
+                  <label className="text-xs text-[#5A5A6E] mb-2 block">发布渠道（可多选）</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ALL_CHANNELS.map(ch => {
+                      const selected = (step.publishChannels || []).includes(ch.id);
+                      return (
+                        <button
+                          key={ch.id}
+                          type="button"
+                          onClick={() => {
+                            const cur = step.publishChannels || [];
+                            const next = selected
+                              ? cur.filter(c => c !== ch.id)
+                              : [...cur, ch.id];
+                            onUpdate({ ...step, publishChannels: next });
+                          }}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2 py-1 rounded text-xs border transition-colors",
+                            selected
+                              ? "border-[#EC4899] bg-[#EC489920] text-white"
+                              : "border-[#2A2A3A] text-[#8B8B9E] hover:border-[#3A3A4A]"
+                          )}
+                        >
+                          <span>{ch.icon}</span>
+                          <span className="truncate">{ch.name}</span>
+                          {selected && <span className="ml-auto text-[#EC4899]">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 内容来源 */}
+                <div>
+                  <label className="text-xs text-[#5A5A6E] mb-1 block">内容来源</label>
+                  <select
+                    value={step.contentSource || "prev_output"}
+                    onChange={e => onUpdate({ ...step, contentSource: e.target.value as WorkflowStep["contentSource"] })}
+                    className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#EC4899]"
+                  >
+                    <option value="prev_output">上一步 Agent 输出</option>
+                    <option value="static">静态内容（手动填写）</option>
+                    <option value="agent_output">指定 Agent 输出</option>
+                  </select>
+                </div>
+
+                {/* 静态内容 */}
+                {step.contentSource === "static" && (
+                  <div>
+                    <label className="text-xs text-[#5A5A6E] mb-1 block">静态内容</label>
+                    <textarea
+                      value={step.message || ""}
+                      onChange={e => onUpdate({ ...step, message: e.target.value })}
+                      rows={3}
+                      placeholder="输入要发布的内容..."
+                      className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#EC4899] resize-none"
+                    />
+                  </div>
+                )}
+
+                {/* 内容类型 */}
+                <div>
+                  <label className="text-xs text-[#5A5A6E] mb-1 block">内容类型</label>
+                  <select
+                    value={step.contentType || "short_post"}
+                    onChange={e => onUpdate({ ...step, contentType: e.target.value })}
+                    className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-[#EC4899]"
+                  >
+                    <option value="short_post">短帖 (Short Post)</option>
+                    <option value="article">长文 (Article)</option>
+                    <option value="image_post">图文 (Image + Post)</option>
+                    <option value="video_desc">视频描述</option>
+                    <option value="thread">线程/系列</option>
+                  </select>
+                </div>
+
+                {/* 开关选项 */}
+                <div className="space-y-2">
+                  {[
+                    { key: "requireApproval", label: "发布前需要人工审核", desc: "内容存入 Content Calendar 等待确认" },
+                    { key: "adaptContent",    label: "AI 自动适配各渠道格式", desc: "长度、标签、语调自动调整" },
+                  ].map(opt => (
+                    <label key={opt.key} className="flex items-start gap-2 cursor-pointer group">
+                      <div className="relative mt-0.5">
+                        <input
+                          type="checkbox"
+                          checked={!!(step[opt.key as keyof WorkflowStep])}
+                          onChange={e => onUpdate({ ...step, [opt.key]: e.target.checked })}
+                          className="sr-only"
+                        />
+                        <div className={cn(
+                          "w-8 h-4 rounded-full transition-colors",
+                          step[opt.key as keyof WorkflowStep] ? "bg-[#EC4899]" : "bg-[#2A2A3A]"
+                        )}>
+                          <div className={cn(
+                            "w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform",
+                            step[opt.key as keyof WorkflowStep] ? "translate-x-4" : "translate-x-0.5"
+                          )} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-white">{opt.label}</div>
+                        <div className="text-[10px] text-[#5A5A6E]">{opt.desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

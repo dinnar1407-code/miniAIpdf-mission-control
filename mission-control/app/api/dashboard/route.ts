@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 
 export async function GET() {
   try {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
     const [
       totalTasks,
       openTasks,
@@ -10,6 +13,11 @@ export async function GET() {
       recentLogs,
       recentAlerts,
       metrics,
+      workflowRunsThisWeek,
+      completedRunsThisWeek,
+      contentPublished,
+      contentDraft,
+      contentScheduled,
     ] = await Promise.all([
       prisma.task.count(),
       prisma.task.count({ where: { status: { notIn: ["done", "cancelled"] } } }),
@@ -20,16 +28,27 @@ export async function GET() {
         include: { agent: { select: { name: true } } },
       }),
       prisma.alert.findMany({
-        where: { status: { in: ["new", "acknowledged"] } },
-        take: 5,
+        where:   { status: { in: ["new", "acknowledged"] } },
+        take:    5,
         orderBy: { createdAt: "desc" },
         include: { project: { select: { name: true, color: true } } },
       }),
       prisma.metricSnapshot.findMany({
-        where: { metric: { in: ["mrr", "users"] } },
+        where:   { metric: { in: ["mrr", "users"] } },
         orderBy: { date: "desc" },
-        take: 50,
+        take:    50,
       }),
+      // Workflow runs this week
+      prisma.workflowRun.count({
+        where: { createdAt: { gte: weekAgo } },
+      }),
+      prisma.workflowRun.count({
+        where: { createdAt: { gte: weekAgo }, status: "completed" },
+      }),
+      // ContentCalendar stats
+      prisma.contentCalendar.count({ where: { status: "published" } }),
+      prisma.contentCalendar.count({ where: { status: "draft" } }),
+      prisma.contentCalendar.count({ where: { status: "scheduled" } }),
     ]);
 
     // Aggregate MRR and users from latest metrics
@@ -42,47 +61,65 @@ export async function GET() {
 
     const activeAgents = agents.filter(a => a.status === "active").length;
 
+    // Recent workflow runs for activity display
+    const recentRuns = await prisma.workflowRun.findMany({
+      take:    5,
+      orderBy: { createdAt: "desc" },
+      include: { workflow: { select: { name: true } } },
+    });
+
     const data = {
       stats: {
-        mrr: Math.round(mrrTotal) || 2327,
-        mrrChange: 12,
-        users: Math.round(usersTotal) || 4494,
-        usersChange: 8,
+        mrr:             Math.round(mrrTotal) || 2327,
+        mrrChange:       12,
+        users:           Math.round(usersTotal) || 4494,
+        usersChange:     8,
         openTasks,
         totalTasks,
         activeAgents,
-        totalAgents: agents.length,
-        agentHours: 142,
+        totalAgents:     agents.length,
+        // Workflow stats
+        workflowRunsThisWeek,
+        completedRunsThisWeek,
+        // Content stats
+        contentPublished,
+        contentDraft,
+        contentScheduled,
       },
       recentActivity: recentLogs.map(log => ({
-        id: log.id,
-        agentName: log.agent?.name || "System",
-        agentEmoji: "🤖",
-        action: log.action,
-        projectName: log.projectId || "Platform",
+        id:           log.id,
+        agentName:    log.agent?.name || "System",
+        agentEmoji:   "🤖",
+        action:       log.action,
+        projectName:  log.projectId || "Platform",
         projectColor: "#3B82F6",
-        timestamp: log.timestamp,
+        timestamp:    log.timestamp,
       })),
       alerts: recentAlerts.map(a => ({
-        id: a.id,
+        id:       a.id,
         severity: a.severity,
-        message: a.message,
-        project: a.project?.name || "System",
-        time: formatRelative(a.createdAt),
+        message:  a.message,
+        project:  a.project?.name || "System",
+        time:     formatRelative(a.createdAt),
       })),
       agents: agents.map(a => ({
-        id: a.id,
-        name: a.name,
-        emoji: agentEmoji(a.name),
-        status: a.status,
+        id:          a.id,
+        name:        a.name,
+        emoji:       agentEmoji(a.name),
+        status:      a.status,
         currentTask: a.currentTask,
+      })),
+      recentRuns: recentRuns.map(r => ({
+        id:     r.id,
+        name:   r.workflow.name,
+        status: r.status,
+        time:   formatRelative(r.createdAt),
       })),
     };
 
     return NextResponse.json(data);
   } catch (err) {
     console.error("Dashboard API error:", err);
-    // Fallback to mock data if DB fails
     return NextResponse.json(getMockData());
   }
 }
@@ -97,22 +134,28 @@ function agentEmoji(name: string) {
 function formatRelative(date: Date) {
   const diff = Date.now() - new Date(date).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins}分钟前`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return `${hours}小时前`;
+  return `${Math.floor(hours / 24)}天前`;
 }
 
 function getMockData() {
   return {
-    stats: { mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8, openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5, agentHours: 142 },
+    stats: {
+      mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8,
+      openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5,
+      workflowRunsThisWeek: 0, completedRunsThisWeek: 0,
+      contentPublished: 0, contentDraft: 0, contentScheduled: 0,
+    },
     recentActivity: [],
     alerts: [],
     agents: [
       { id: "1", name: "Playfish", emoji: "🌾", status: "active" },
-      { id: "2", name: "PM01", emoji: "📝", status: "active" },
-      { id: "3", name: "Admin01", emoji: "🔧", status: "idle" },
+      { id: "2", name: "PM01",     emoji: "📝", status: "active" },
+      { id: "3", name: "Admin01",  emoji: "🔧", status: "idle" },
     ],
+    recentRuns: [],
   };
 }
