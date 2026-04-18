@@ -38,7 +38,10 @@ export async function GET(req: NextRequest) {
     // 筛选出 daily workflows 或没有指定 cronType 的（向后兼容）
     const dailyWorkflows = workflows.filter((wf) => {
       try {
-        const config = wf.triggerConfig as Record<string, unknown> | null;
+        const raw = wf.triggerConfig;
+        const config: Record<string, unknown> | null = raw
+          ? (typeof raw === "string" ? JSON.parse(raw) : raw as Record<string, unknown>)
+          : null;
         if (!config) return true; // 没有 cronType，视为 daily
         if (config.cronType === "daily") return true;
         if (config.cronType === undefined || config.cronType === null)

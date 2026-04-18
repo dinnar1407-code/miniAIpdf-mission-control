@@ -30,7 +30,10 @@ export async function GET(req: NextRequest) {
 
     const weeklyWorkflows = workflows.filter((wf) => {
       try {
-        const config = wf.triggerConfig as Record<string, unknown> | null;
+        const raw = wf.triggerConfig;
+        const config: Record<string, unknown> | null = raw
+          ? (typeof raw === "string" ? JSON.parse(raw) : raw as Record<string, unknown>)
+          : null;
         return config && config.cronType === "weekly";
       } catch {
         return false;
