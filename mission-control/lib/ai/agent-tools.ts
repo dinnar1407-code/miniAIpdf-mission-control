@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { ClaudeTool, ToolExecutor } from "@/lib/ai/claude-client";
 import { publishToChannels } from "@/lib/channels/publisher";
 import { ChannelId, PublishContent } from "@/lib/channels/types";
+import { getShopifyClient } from "@/lib/integrations/shopify";
 
 // ==================== 工具定义（Claude 可调用的工具列表）====================
 
@@ -175,6 +176,101 @@ const TOOLS_ADMIN01: ClaudeTool[] = [
   },
 ];
 
+// ==================== FurMates Shopify 工具 ====================
+
+const TOOLS_FURMATES: ClaudeTool[] = [
+  {
+    name: "get_shopify_summary",
+    description: "获取 FurMates Shopify 店铺的销售概览数据：订单数、营收、待发货数量等。",
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "string", description: "统计最近多少天，默认 7" },
+      },
+    },
+  },
+  {
+    name: "list_shopify_orders",
+    description: "查询 Shopify 订单列表，支持按状态筛选。",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "订单状态: open / closed / cancelled / any，默认 open", enum: ["open", "closed", "cancelled", "any"] },
+        limit:  { type: "string", description: "返回条数上限，默认 20" },
+      },
+    },
+  },
+  {
+    name: "get_shopify_order",
+    description: "获取指定订单的完整详情，包含商品、客户、地址信息。",
+    input_schema: {
+      type: "object",
+      properties: {
+        order_id: { type: "string", description: "Shopify 订单 ID" },
+      },
+      required: ["order_id"],
+    },
+  },
+  {
+    name: "fulfill_shopify_order",
+    description: "将订单标记为已发货，可选填物流单号和承运商。",
+    input_schema: {
+      type: "object",
+      properties: {
+        order_id:          { type: "string", description: "Shopify 订单 ID" },
+        tracking_number:   { type: "string", description: "物流单号（可选）" },
+        tracking_company:  { type: "string", description: "承运商名称，如 UPS、FedEx（可选）" },
+      },
+      required: ["order_id"],
+    },
+  },
+  {
+    name: "search_shopify_customers",
+    description: "按姓名、邮箱或手机号搜索客户。",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "搜索关键词" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "tag_shopify_customer",
+    description: "给客户添加标签，用于 Angel 客户计划等分层管理。已有标签会保留，只追加新标签。",
+    input_schema: {
+      type: "object",
+      properties: {
+        customer_id: { type: "string", description: "Shopify 客户 ID" },
+        tags:        { type: "string", description: "要添加的标签，逗号分隔，如: angel-customer,vip" },
+        note:        { type: "string", description: "客户备注（可选）" },
+      },
+      required: ["customer_id", "tags"],
+    },
+  },
+  {
+    name: "check_low_stock",
+    description: "检查 FurMates 店铺中库存低于阈值的商品，用于补货预警。",
+    input_schema: {
+      type: "object",
+      properties: {
+        threshold: { type: "string", description: "库存阈值，低于此数量视为低库存，默认 10" },
+      },
+    },
+  },
+  {
+    name: "list_shopify_products",
+    description: "查看店铺产品列表，支持按状态筛选。",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "产品状态: active / draft / archived，默认 active", enum: ["active", "draft", "archived"] },
+        limit:  { type: "string", description: "返回条数，默认 20" },
+      },
+    },
+  },
+];
+
 // 按 agentId 获取工具列表
 export function getAgentTools(agentId: string): ClaudeTool[] {
   const toolMap: Record<string, ClaudeTool[]> = {
@@ -183,6 +279,7 @@ export function getAgentTools(agentId: string): ClaudeTool[] {
     "pm01-b": TOOLS_PM01,  // 复用 PM01 工具（中文内容）
     dfm:      TOOLS_DFM,
     admin01:  TOOLS_ADMIN01,
+    furmates: TOOLS_FURMATES,
   };
   return toolMap[agentId] ?? [];
 }
@@ -427,6 +524,109 @@ export function createToolExecutor(
           `[${e.createdAt.toISOString().slice(11, 19)}] Run ${e.runId.slice(-6)} | ${e.message}`
         );
         return `最近 ${hours}h 内 ${errors.length} 条错误:\n${lines.join("\n")}`;
+      }
+
+      // ── FurMates Shopify 工具 ───────────────────────────────
+      if (name === "get_shopify_summary") {
+        const shopify = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置（请在 Settings → Channels 添加 shopify 渠道凭证或设置 SHOPIFY_SHOP_DOMAIN + SHOPIFY_ACCESS_TOKEN）";
+        const days    = parseInt(String(input.days ?? "7"), 10);
+        const summary = await shopify.getOrderSummary(days);
+        return `FurMates 最近 ${days} 天销售摘要：\n` +
+          `订单数: ${summary.totalOrders}\n` +
+          `总营收: ${summary.currency} ${summary.totalRevenue}\n` +
+          `均单价: ${summary.currency} ${summary.avgOrderValue}\n` +
+          `待发货: ${summary.pendingFulfillment} 单`;
+      }
+
+      if (name === "list_shopify_orders") {
+        const shopify = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        const { orders } = await shopify.listOrders({
+          status: String(input.status ?? "open"),
+          limit:  parseInt(String(input.limit ?? "20"), 10),
+        });
+        if (!orders.length) return "没有找到符合条件的订单";
+        const lines = orders.map(o =>
+          `#${o.order_number} | ${o.email} | ${o.currency} ${o.total_price} | 支付:${o.financial_status} | 发货:${o.fulfillment_status ?? "未发货"}`
+        );
+        return `${orders.length} 条订单:\n${lines.join("\n")}`;
+      }
+
+      if (name === "get_shopify_order") {
+        const shopify = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        const { order } = await shopify.getOrder(String(input.order_id ?? ""));
+        const items = order.line_items.map(i => `  - ${i.title} ×${i.quantity} @ ${i.price}`).join("\n");
+        return `订单 #${order.order_number}:\n` +
+          `客户: ${order.email}\n` +
+          `金额: ${order.currency} ${order.total_price}\n` +
+          `支付: ${order.financial_status} | 发货: ${order.fulfillment_status ?? "未发货"}\n` +
+          `商品:\n${items}`;
+      }
+
+      if (name === "fulfill_shopify_order") {
+        const shopify = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        await shopify.fulfillOrder(String(input.order_id ?? ""), {
+          tracking_number:  input.tracking_number  ? String(input.tracking_number)  : undefined,
+          tracking_company: input.tracking_company ? String(input.tracking_company) : undefined,
+        });
+        return `✅ 订单 ${input.order_id} 已标记发货${input.tracking_number ? `，物流单号: ${input.tracking_number}` : ""}`;
+      }
+
+      if (name === "search_shopify_customers") {
+        const shopify = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        const { customers } = await shopify.searchCustomers(String(input.query ?? ""));
+        if (!customers.length) return "未找到匹配客户";
+        const lines = customers.map(c =>
+          `ID:${c.id} | ${c.first_name} ${c.last_name} | ${c.email} | 订单数:${c.orders_count} | 消费:${c.total_spent} | 标签:${c.tags || "无"}`
+        );
+        return `找到 ${customers.length} 个客户:\n${lines.join("\n")}`;
+      }
+
+      if (name === "tag_shopify_customer") {
+        const shopify    = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        const customerId = String(input.customer_id ?? "");
+        const newTags    = String(input.tags ?? "").split(",").map(t => t.trim()).filter(Boolean);
+
+        // 先获取现有标签，追加而不是覆盖
+        const { customer } = await shopify.getCustomer(customerId);
+        const existingTags = customer.tags ? customer.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
+        const mergedTags   = [...new Set([...existingTags, ...newTags])].join(", ");
+
+        const updateData: Record<string, string> = { tags: mergedTags };
+        if (input.note) updateData.note = String(input.note);
+
+        await shopify.updateCustomer(customerId, updateData as Parameters<typeof shopify.updateCustomer>[1]);
+        return `✅ 客户 ${customer.first_name} ${customer.last_name}（${customer.email}）标签已更新: ${mergedTags}`;
+      }
+
+      if (name === "check_low_stock") {
+        const shopify   = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        const threshold = parseInt(String(input.threshold ?? "10"), 10);
+        const { inventory_levels } = await shopify.getInventoryLevels();
+        const low = inventory_levels.filter(l => l.available <= threshold);
+        if (!low.length) return `✅ 所有商品库存均高于 ${threshold} 件`;
+        const lines = low.map(l => `商品ID:${l.inventory_item_id} | 库存:${l.available} 件`);
+        return `⚠️ ${low.length} 个商品库存低于 ${threshold} 件:\n${lines.join("\n")}`;
+      }
+
+      if (name === "list_shopify_products") {
+        const shopify = await getShopifyClient();
+        if (!shopify) return "ERROR: Shopify 未配置";
+        const { products } = await shopify.listProducts({
+          status: String(input.status ?? "active"),
+          limit:  parseInt(String(input.limit ?? "20"), 10),
+        });
+        if (!products.length) return "没有找到产品";
+        const lines = products.map(p =>
+          `ID:${p.id} | ${p.title} | ${p.status} | 变体数:${p.variants.length}`
+        );
+        return `${products.length} 个产品:\n${lines.join("\n")}`;
       }
 
       return `ERROR: 未知工具 "${name}"`;
