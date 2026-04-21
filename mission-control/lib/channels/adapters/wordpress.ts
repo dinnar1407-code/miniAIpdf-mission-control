@@ -27,17 +27,28 @@ export class WordPressAdapter extends BaseChannelAdapter {
       // Create Basic Auth header
       const authString = Buffer.from(`${username}:${appPassword}`).toString("base64");
 
-      // Determine publish status based on config defaults
+      // 发布状态优先级：
+      // 1. content.metadata.status（工具调用时的明确指令）
+      // 2. config.defaults.publishStatus（渠道全局默认）
+      // 3. 兜底："draft"（安全默认，避免意外直发）
+      const metaStatus = content.metadata?.status as string | undefined;
       const publishStatus =
-        config.defaults?.publishStatus === "publish" ? "publish" : "draft";
+        metaStatus === "publish" || metaStatus === "draft"
+          ? metaStatus
+          : config.defaults?.publishStatus === "publish"
+          ? "publish"
+          : "draft";
+
+      // tags：从 content.tags 数组生成（WordPress REST API 接受 tag slug 或 ID，这里用 slug）
+      const tagSlugs = (content.tags ?? []).map(t => t.toLowerCase().replace(/\s+/g, "-"));
 
       // Prepare post data
-      const postData = {
-        title: content.title || "Untitled",
+      const postData: Record<string, unknown> = {
+        title:   content.title || "Untitled",
         content: content.body,
-        status: publishStatus,
-        categories: [],
-        tags: [],
+        status:  publishStatus,
+        ...(content.summary ? { excerpt: content.summary } : {}),
+        ...(tagSlugs.length > 0 ? { tags: tagSlugs } : {}),
       };
 
       const response = await fetch(endpoint, {
