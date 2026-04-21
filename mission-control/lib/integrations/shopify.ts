@@ -296,3 +296,79 @@ export function verifyShopifyWebhook(body: string, hmacHeader: string): boolean 
   const computed = crypto.createHmac("sha256", secret).update(body, "utf8").digest("base64");
   return crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(hmacHeader));
 }
+
+// ==================== KPI 同步（daily cron 调用）====================
+
+export async function syncShopifyKpis(projectId: string | null): Promise<void> {
+  const shopify = await getShopifyClient();
+  if (!shopify) {
+    console.warn("[Shopify] 未配置凭证，跳过 KPI 同步");
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 拉昨日数据（UTC 00:00 ~ 23:59）
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const dayBefore  = new Date(yesterday);
+  dayBefore.setDate(dayBefore.getDate() - 1);
+
+  const [todayData, yesterdayData] = await Promise.all([
+    shopify.listOrders({ status: "any", limit: 250, created_at_min: yesterday.toISOString() }),
+    shopify.listOrders({ status: "any", limit: 250, created_at_min: dayBefore.toISOString(),
+      // 手动过滤昨日范围
+    }),
+  ]);
+
+  const calcMetrics = (orders: ShopifyOrder[]) => {
+    const paid = orders.filter(o => o.financial_status === "paid" || o.financial_status === "partially_paid");
+    const revenue = paid.reduce((s, o) => s + parseFloat(o.total_price), 0);
+    const pending = orders.filter(o => o.fulfillment_status === null && o.financial_status === "paid").length;
+    return {
+      revenue:   Math.round(revenue * 100) / 100,
+      orders:    orders.length,
+      pending,
+      avgOrder:  paid.length > 0 ? Math.round((revenue / paid.length) * 100) / 100 : 0,
+    };
+  };
+
+  const curr = calcMetrics(todayData.orders);
+  const prev = calcMetrics(yesterdayData.orders.filter(o =>
+    new Date(o.created_at) >= dayBefore && new Date(o.created_at) < yesterday
+  ));
+
+  const metrics: Array<{ metric: string; value: number; delta?: number }> = [
+    { metric: "shopify_revenue",   value: curr.revenue,  delta: curr.revenue  - prev.revenue  },
+    { metric: "shopify_orders",    value: curr.orders,   delta: curr.orders   - prev.orders   },
+    { metric: "shopify_pending",   value: curr.pending,  delta: curr.pending  - prev.pending  },
+    { metric: "shopify_avg_order", value: curr.avgOrder, delta: curr.avgOrder - prev.avgOrder },
+  ];
+
+  for (const m of metrics) {
+    await prisma.kpiSnapshot.upsert({
+      where: {
+        // 用 projectId + metric + date 的组合唯一性（近似，date 按天取整）
+        id: `shopify_${m.metric}_${yesterday.toISOString().split("T")[0]}`,
+      },
+      create: {
+        id:        `shopify_${m.metric}_${yesterday.toISOString().split("T")[0]}`,
+        date:      yesterday,
+        projectId: projectId ?? undefined,
+        source:    "shopify",
+        metric:    m.metric,
+        value:     m.value,
+        delta:     m.delta,
+        metadata:  JSON.stringify({ syncedAt: new Date().toISOString() }),
+      },
+      update: {
+        value:    m.value,
+        delta:    m.delta,
+        metadata: JSON.stringify({ syncedAt: new Date().toISOString() }),
+      },
+    });
+  }
+
+  console.log(`[Shopify] KPI 同步完成: 营收=${curr.revenue}, 订单=${curr.orders}, 待发货=${curr.pending}`);
+}

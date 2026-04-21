@@ -4,6 +4,7 @@ import { executeWorkflow } from "@/lib/workflow-engine";
 import { syncStripeKpis } from "@/lib/integrations/stripe";
 import { syncGSCKpis } from "@/lib/integrations/gsc";
 import { syncGAKpis } from "@/lib/integrations/ga";
+import { syncShopifyKpis } from "@/lib/integrations/shopify";
 
 // Vercel Cron Job — 每天 9:00 UTC 触发
 // 1. 触发所有 triggerType="schedule" + triggerConfig.cronType="daily" 的 workflow
@@ -120,6 +121,18 @@ export async function GET(req: NextRequest) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`[Cron Daily] GA KPI 同步失败:`, msg);
       kpiStatus.ga = { ok: false, error: msg };
+    }
+
+    // 同步 Shopify KPI（FurMates）
+    try {
+      console.log(`[Cron Daily] 开始同步 Shopify KPI...`);
+      await syncShopifyKpis("proj_furmates");
+      kpiStatus.shopify = { ok: true };
+      console.log(`[Cron Daily] Shopify KPI 同步成功`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[Cron Daily] Shopify KPI 同步失败:`, msg);
+      kpiStatus.shopify = { ok: false, error: msg };
     }
 
     return NextResponse.json({

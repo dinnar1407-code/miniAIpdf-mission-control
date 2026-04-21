@@ -15,6 +15,14 @@ import { ClaudeTool, ToolExecutor } from "@/lib/ai/claude-client";
 import { publishToChannels } from "@/lib/channels/publisher";
 import { ChannelId, PublishContent } from "@/lib/channels/types";
 import { getShopifyClient } from "@/lib/integrations/shopify";
+import { sendEmail, EMAIL_TEMPLATES, EmailTemplateKey } from "@/lib/integrations/gmail";
+import {
+  listConversations,
+  getConversation,
+  sendMessage as tidioSendMessage,
+  closeConversation,
+  getPendingConversationsSummary,
+} from "@/lib/integrations/tidio";
 
 // ==================== 工具定义（Claude 可调用的工具列表）====================
 
@@ -267,6 +275,93 @@ const TOOLS_FURMATES: ClaudeTool[] = [
         status: { type: "string", description: "产品状态: active / draft / archived，默认 active", enum: ["active", "draft", "archived"] },
         limit:  { type: "string", description: "返回条数，默认 20" },
       },
+    },
+  },
+
+  // ── Gmail 邮件工具 ──────────────────────────────────────
+  {
+    name: "send_email_template",
+    description: "通过 Gmail 向客户发送 FurMates 品牌邮件（使用预设模板）。用于欢迎邮件、优惠码推送、唤醒流失用户、Angel 客户奖励等。",
+    input_schema: {
+      type: "object",
+      properties: {
+        to:           { type: "string", description: "收件人邮箱" },
+        template:     { type: "string", description: "模板名称: welcome / productIntro / limitedOffer / lastChance / wakeUp / angelWelcome", enum: ["welcome", "productIntro", "limitedOffer", "lastChance", "wakeUp", "angelWelcome"] },
+        customer_name:{ type: "string", description: "客户姓名" },
+        coupon_code:  { type: "string", description: "优惠码（可选，限时优惠和 Angel 邮件适用）" },
+        product_url:  { type: "string", description: "产品链接（可选）" },
+        store_url:    { type: "string", description: "店铺链接（可选）" },
+      },
+      required: ["to", "template", "customer_name"],
+    },
+  },
+  {
+    name: "send_custom_email",
+    description: "通过 Gmail 发送自定义 HTML 邮件给指定客户。用于需要个性化内容的场景。",
+    input_schema: {
+      type: "object",
+      properties: {
+        to:      { type: "string", description: "收件人邮箱" },
+        subject: { type: "string", description: "邮件主题" },
+        html:    { type: "string", description: "邮件正文 HTML" },
+        text:    { type: "string", description: "纯文本备用版本（可选）" },
+      },
+      required: ["to", "subject", "html"],
+    },
+  },
+
+  // ── Tidio 客服工具 ──────────────────────────────────────
+  {
+    name: "list_tidio_conversations",
+    description: "查看 Tidio 客服对话列表，支持按状态筛选。用于监控未回复的客户咨询。",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", description: "对话状态: open / solved / pending，默认 open", enum: ["open", "solved", "pending"] },
+        limit:  { type: "string", description: "返回条数，默认 10" },
+      },
+    },
+  },
+  {
+    name: "get_tidio_conversation",
+    description: "获取指定 Tidio 对话的完整消息记录，用于了解客户问题详情后再回复。",
+    input_schema: {
+      type: "object",
+      properties: {
+        conversation_id: { type: "string", description: "Tidio 对话 ID" },
+      },
+      required: ["conversation_id"],
+    },
+  },
+  {
+    name: "reply_tidio_conversation",
+    description: "以客服身份回复 Tidio 对话中的客户。用于处理咨询、投诉、售后问题。",
+    input_schema: {
+      type: "object",
+      properties: {
+        conversation_id: { type: "string", description: "Tidio 对话 ID" },
+        message:         { type: "string", description: "回复内容" },
+      },
+      required: ["conversation_id", "message"],
+    },
+  },
+  {
+    name: "close_tidio_conversation",
+    description: "将 Tidio 对话标记为已解决（solved）。问题处理完毕后使用。",
+    input_schema: {
+      type: "object",
+      properties: {
+        conversation_id: { type: "string", description: "Tidio 对话 ID" },
+      },
+      required: ["conversation_id"],
+    },
+  },
+  {
+    name: "get_tidio_summary",
+    description: "获取 Tidio 客服概览：未处理对话数量和最新消息预览。用于日报中的客服状态汇总。",
+    input_schema: {
+      type: "object",
+      properties: {},
     },
   },
 ];
@@ -627,6 +722,86 @@ export function createToolExecutor(
           `ID:${p.id} | ${p.title} | ${p.status} | 变体数:${p.variants.length}`
         );
         return `${products.length} 个产品:\n${lines.join("\n")}`;
+      }
+
+      // ── Gmail 邮件工具 ─────────────────────────────────────
+      if (name === "send_email_template") {
+        const to           = String(input.to            ?? "");
+        const templateKey  = String(input.template      ?? "") as EmailTemplateKey;
+        const customerName = String(input.customer_name ?? "there");
+        const couponCode   = input.coupon_code  ? String(input.coupon_code)  : undefined;
+        const productUrl   = input.product_url  ? String(input.product_url)  : undefined;
+        const storeUrl     = input.store_url    ? String(input.store_url)    : undefined;
+
+        if (!to) return "ERROR: to（收件人）不能为空";
+        if (!(templateKey in EMAIL_TEMPLATES)) {
+          return `ERROR: 未知模板 "${templateKey}"，可选: welcome, productIntro, limitedOffer, lastChance, wakeUp, angelWelcome`;
+        }
+
+        const vars    = { name: customerName, email: to, couponCode, productUrl, storeUrl };
+        const tplFn   = EMAIL_TEMPLATES[templateKey] as (v: typeof vars) => { subject: string; html: string };
+        const { subject, html } = tplFn(vars);
+        const result  = await sendEmail({ to, subject, html });
+        return `✅ 邮件已发送 → ${to}，主题: "${subject}"，Message ID: ${result.messageId}`;
+      }
+
+      if (name === "send_custom_email") {
+        const to      = String(input.to      ?? "");
+        const subject = String(input.subject ?? "");
+        const html    = String(input.html    ?? "");
+        const text    = input.text ? String(input.text) : undefined;
+
+        if (!to || !subject || !html) return "ERROR: to、subject、html 均为必填";
+
+        const result = await sendEmail({ to, subject, html, text });
+        return `✅ 自定义邮件已发送 → ${to}，Message ID: ${result.messageId}`;
+      }
+
+      // ── Tidio 客服工具 ─────────────────────────────────────
+      if (name === "list_tidio_conversations") {
+        const status = String(input.status ?? "open") as "open" | "solved" | "pending";
+        const limit  = parseInt(String(input.limit ?? "10"), 10);
+        const { conversations, total } = await listConversations({ status, limit });
+        if (!conversations.length) return `没有 ${status} 状态的对话`;
+        const lines = conversations.map(c => {
+          const lastMsg = c.messages?.[c.messages.length - 1];
+          const preview = lastMsg?.message?.slice(0, 80) ?? "(无消息)";
+          return `ID:${c.id} | ${c.contact?.email ?? "Unknown"} | "${preview}" | ${c.updated_at.slice(0, 10)}`;
+        });
+        return `共 ${total} 条 ${status} 对话，显示 ${conversations.length} 条:\n${lines.join("\n")}`;
+      }
+
+      if (name === "get_tidio_conversation") {
+        const conv = await getConversation(String(input.conversation_id ?? ""));
+        const msgs = (conv.messages ?? []).slice(-10).map(m =>
+          `[${m.created_at.slice(11, 16)}] ${m.author.type === "visitor" ? "客户" : "客服"}: ${m.message}`
+        );
+        return `对话 ${conv.id}（${conv.status}）\n` +
+          `客户: ${conv.contact?.email ?? conv.contact?.name ?? "Unknown"}\n` +
+          `最近消息:\n${msgs.join("\n")}`;
+      }
+
+      if (name === "reply_tidio_conversation") {
+        const msg = await tidioSendMessage(
+          String(input.conversation_id ?? ""),
+          String(input.message ?? "")
+        );
+        return `✅ 回复已发送，Message ID: ${msg.id}`;
+      }
+
+      if (name === "close_tidio_conversation") {
+        await closeConversation(String(input.conversation_id ?? ""));
+        return `✅ 对话 ${input.conversation_id} 已标记为已解决`;
+      }
+
+      if (name === "get_tidio_summary") {
+        const summary = await getPendingConversationsSummary();
+        const topLines = summary.topMessages.map(m =>
+          `  • ${m.contact}: "${m.preview}" (${m.created_at.slice(0, 10)})`
+        );
+        return `Tidio 客服概览:\n` +
+          `待处理: ${summary.openCount} open / ${summary.pendingCount} pending\n` +
+          `最新对话:\n${topLines.join("\n")}`;
       }
 
       return `ERROR: 未知工具 "${name}"`;
