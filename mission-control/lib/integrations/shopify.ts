@@ -210,7 +210,7 @@ export class ShopifyClient {
   }
 
   // ── Customers ─────────────────────────────────────────────
-  listCustomers(p: { limit?: number; email?: string } = {}) {
+  listCustomers(p: { limit?: number; email?: string; created_at_min?: string; created_at_max?: string; since_id?: string } = {}) {
     return this.request<{ customers: ShopifyCustomer[] }>(`/customers.json${this.qs(p)}`);
   }
   getCustomer(id: string) {
