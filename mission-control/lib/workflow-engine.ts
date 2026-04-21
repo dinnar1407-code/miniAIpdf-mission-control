@@ -421,6 +421,7 @@ export async function executeWorkflow(
           },
         });
         await addLog(run.id, -1, "system", `✗ Workflow 在步骤 ${i + 1} 失败: ${result.error}`, "error");
+        await sendTelegram(`❌ *${workflow.name}* 执行失败\n步骤 ${i + 1}「${step.label}」\n错误: ${result.error}`);
         return run;
       }
 
@@ -455,6 +456,7 @@ export async function executeWorkflow(
       data: { status: "failed", completedAt: new Date(), error: message },
     });
     await addLog(run.id, -1, "system", `✗ 意外错误: ${message}`, "error");
+    await sendTelegram(`❌ *${workflow.name}* 意外崩溃\n错误: ${message}`);
     return run;
   }
 }
