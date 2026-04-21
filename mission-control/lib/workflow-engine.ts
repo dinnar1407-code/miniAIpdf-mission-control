@@ -2,10 +2,12 @@ import { prisma } from "@/lib/db";
 import { WorkflowStep } from "@/lib/workflow-types";
 import { channelRegistry } from "@/lib/channels/registry";
 import { ChannelId, PublishContent } from "@/lib/channels/types";
-import { ask } from "@/lib/ai/claude-client";
+import { ask, callClaudeWithTools } from "@/lib/ai/claude-client";
 import { getAgentPrompt } from "@/lib/ai/agent-prompts";
+import { getAgentTools, getAgentModel, createToolExecutor } from "@/lib/ai/agent-tools";
 import { createApprovalRequest } from "@/lib/approval";
 import { getAgentMemoryContext, extractAndSaveMemory } from "@/lib/ai/agent-memory";
+import { publishToChannels } from "@/lib/channels/publisher";
 
 // ==================== TELEGRAM HELPER ====================
 
@@ -75,13 +77,15 @@ async function executeStep(
 
   switch (step.type) {
 
-    // ── AGENT：真正调用 Claude ────────────────────────────────
+    // ── AGENT：调用 Claude + Tool Use ──────────────────────────
     case "agent": {
       const agentId = step.agent || "playfish";
       const action  = step.action || "完成分配的任务";
       await addLog(runId, index, step.type, `🤖 ${agentId} 正在思考...`, "info");
 
       const systemPrompt = getAgentPrompt(agentId);
+      const agentTools   = getAgentTools(agentId);
+      const agentModel   = getAgentModel(agentId);
 
       // 执行前：获取 Agent 记忆上下文
       const memoryContext = await getAgentMemoryContext(agentId);
@@ -90,23 +94,35 @@ async function executeStep(
         ? `上一步输出：\n${prevOutput}\n\n当前任务：${action}`
         : action;
 
-      // 构建增强 Prompt：附加记忆
       if (memoryContext) {
         userMessage = `${userMessage}\n\n${memoryContext}`;
       }
 
-      const output = await ask(systemPrompt, userMessage, "claude-haiku-4-5-20251001");
+      let output: string;
+
+      if (agentTools.length > 0) {
+        // ── 有工具：使用 Tool Use 多轮调用 ──
+        await addLog(runId, index, step.type, `🔧 ${agentId} 可用工具: ${agentTools.map(t => t.name).join(", ")}`, "info");
+
+        const toolExecutor = createToolExecutor(agentId, (toolName, msg) => {
+          void addLog(runId, index, step.type, `  ↳ [tool] ${toolName}: ${msg}`, "info");
+        });
+
+        output = await callClaudeWithTools(systemPrompt, userMessage, agentTools, toolExecutor, agentModel);
+      } else {
+        // ── 无工具：单轮调用（向后兼容）──
+        output = await ask(systemPrompt, userMessage, agentModel);
+      }
 
       if (output.startsWith("[AI Error:")) {
         await addLog(runId, index, step.type, `⚠ ${output}（降级为模拟模式）`, "warn");
-        // 降级：Claude 不可用时给出模拟输出
         const fallbacks: Record<string, string[]> = {
           playfish: ["已分析任务并制定执行方案", "优先级已调整，开始执行"],
           pm01:     ["博客草稿已完成，等待审核", "推文已撰写，共 247 字"],
           dfm:      ["日报已生成，关键指标正常", "数据分析完成"],
           admin01:  ["系统巡检完成，状态正常 ✅", "所有服务运行正常"],
         };
-        const sims: string[] = (fallbacks[agentId] ?? undefined) || ["任务已完成"];
+        const sims: string[] = fallbacks[agentId] ?? ["任务已完成"];
         const sim  = sims[Math.floor(Math.random() * sims.length)];
         await addLog(runId, index, step.type, `✓ ${sim}（模拟）`, "success");
         return { success: true, output: sim };
@@ -115,7 +131,6 @@ async function executeStep(
       // 执行后：从输出中提取并保存记忆
       void extractAndSaveMemory(agentId, output, action);
 
-      // 截取前 200 字用于日志展示
       const preview = output.length > 200 ? output.slice(0, 200) + "..." : output;
       await addLog(runId, index, step.type, `✓ ${agentId} 完成 | ${preview}`, "success");
       return { success: true, output };
@@ -310,45 +325,27 @@ async function executeStep(
       }
 
       // ── 无需审批，直接发布 ──
-      const results: string[] = [];
       for (const channelId of channels) {
         const adapter = channelRegistry.get(channelId);
-        if (!adapter) {
-          await addLog(runId, index, step.type, `⚠ 渠道 ${channelId} 未注册`, "warn");
-          continue;
-        }
-
-        await addLog(runId, index, step.type, `📡 发布到 ${adapter.icon} ${adapter.name}...`, "info");
-
-        // 从 DB 读取渠道凭证
-        let channelConfig;
-        try {
-          const cred = await prisma.channelCredential.findUnique({ where: { channelId } });
-          channelConfig = {
-            channelId,
-            enabled: cred?.enabled ?? false,
-            credentials: cred ? JSON.parse(cred.credentials) : {},
-            defaults:    cred ? JSON.parse(cred.defaults) : {},
-          };
-        } catch {
-          channelConfig = { channelId, enabled: false, credentials: {}, defaults: {} };
-        }
-
-        const result = channelConfig.enabled
-          ? await adapter.publish(content, channelConfig)
-          : { success: false, error: "渠道未启用（请在 Settings → Channels 配置）" };
-
-        if (result.success) {
-          await addLog(runId, index, step.type, `✓ ${adapter.name} 发布成功${result.postUrl ? ` → ${result.postUrl}` : ""}`, "success");
-          results.push(`${adapter.icon} ${adapter.name} ✓`);
-        } else {
-          await addLog(runId, index, step.type, `⚠ ${adapter.name}: ${result.error}`, "warn");
-          results.push(`${adapter.icon} ${adapter.name} ⚠`);
+        if (adapter) {
+          await addLog(runId, index, step.type, `📡 发布到 ${adapter.icon} ${adapter.name}...`, "info");
         }
       }
 
-      void content;
-      return { success: true, output: results.join(" | ") };
+      const publishResults = await publishToChannels(channels, content);
+      const resultStrings: string[] = [];
+
+      for (const r of publishResults) {
+        if (r.success) {
+          await addLog(runId, index, step.type, `✓ ${r.channelName} 发布成功${r.postUrl ? ` → ${r.postUrl}` : ""}`, "success");
+          resultStrings.push(`${r.icon} ${r.channelName} ✓`);
+        } else {
+          await addLog(runId, index, step.type, `⚠ ${r.channelName}: ${r.error}`, "warn");
+          resultStrings.push(`${r.icon} ${r.channelName} ⚠`);
+        }
+      }
+
+      return { success: true, output: resultStrings.join(" | ") };
     }
 
     default:

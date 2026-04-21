@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
 import { ApprovalRequest } from "@prisma/client";
+import { publishToChannels, formatPublishResults } from "@/lib/channels/publisher";
+import { ChannelId } from "@/lib/channels/types";
 
 // ==================== TELEGRAM APPROVAL HELPER ====================
 
@@ -170,10 +172,84 @@ export async function handleApprovalResponse(
       },
     });
 
+    // ── 批准后：执行被挂起的发布动作 ──────────────────────────
+    if (action === "approve" && request.contentId) {
+      void executeApprovedContent(request.contentId, request).catch(err => {
+        console.error("[Approval] 批准后执行发布失败:", err);
+      });
+    }
+
     return { ok: true, request: updated };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return { ok: false, error: message };
+  }
+}
+
+// ==================== 批准后执行发布 ====================
+
+async function executeApprovedContent(
+  contentId: string,
+  request: ApprovalRequest
+): Promise<void> {
+  // 读取 ContentCalendar 记录
+  const record = await prisma.contentCalendar.findUnique({ where: { id: contentId } });
+  if (!record) {
+    console.error(`[Approval] ContentCalendar ${contentId} 不存在`);
+    return;
+  }
+
+  // 解析渠道列表
+  let channels: ChannelId[] = [];
+  try {
+    channels = JSON.parse(record.channelIds) as ChannelId[];
+  } catch {
+    console.error(`[Approval] channelIds 解析失败: ${record.channelIds}`);
+    return;
+  }
+
+  if (channels.length === 0) {
+    console.warn(`[Approval] ContentCalendar ${contentId} 没有目标渠道`);
+    return;
+  }
+
+  // 更新状态为 publishing
+  await prisma.contentCalendar.update({
+    where: { id: contentId },
+    data:  { status: "publishing" },
+  });
+
+  // 执行发布
+  const publishResults = await publishToChannels(channels, {
+    title: record.title,
+    body:  record.body,
+    tags:  [],
+  });
+
+  const allSuccess  = publishResults.every(r => r.success);
+  const resultJson  = JSON.stringify(publishResults);
+  const summary     = formatPublishResults(publishResults);
+
+  // 更新 ContentCalendar 状态
+  await prisma.contentCalendar.update({
+    where: { id: contentId },
+    data: {
+      status:         allSuccess ? "published" : "failed",
+      publishedAt:    allSuccess ? new Date() : undefined,
+      publishResults: resultJson,
+    },
+  });
+
+  // 发送 Telegram 结果通知
+  const { token, chatId } = await getTelegramCredentials();
+  if (token && chatId) {
+    const statusEmoji = allSuccess ? "✅" : "⚠️";
+    const msg = `${statusEmoji} *审批执行完成*\n\n任务: ${request.title}\n\n${summary}`;
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ chat_id: chatId, text: msg, parse_mode: "Markdown" }),
+    }).catch(() => {});
   }
 }
 
