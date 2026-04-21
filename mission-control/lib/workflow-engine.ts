@@ -123,14 +123,49 @@ async function executeStep(
 
     // ── HTTP ─────────────────────────────────────────────────
     case "http": {
-      await addLog(runId, index, step.type, `🌐 ${step.method || "GET"} ${step.url}`, "info");
-      await new Promise(r => setTimeout(r, 600));
-      if (Math.random() > 0.9) {
-        await addLog(runId, index, step.type, `✗ HTTP 503`, "error");
-        return { success: false, error: "HTTP 503 Service Unavailable" };
+      const method = (step.method || "GET").toUpperCase();
+      const url    = step.url;
+
+      if (!url) {
+        await addLog(runId, index, step.type, `✗ 缺少 URL`, "error");
+        return { success: false, error: "HTTP step missing URL" };
       }
-      await addLog(runId, index, step.type, `✓ HTTP 200 OK`, "success");
-      return { success: true, output: "HTTP 200 OK" };
+
+      await addLog(runId, index, step.type, `🌐 ${method} ${url}`, "info");
+
+      try {
+        const fetchOptions: RequestInit = { method };
+
+        // 合并自定义 headers
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(step.headers || {}),
+        };
+        fetchOptions.headers = headers;
+
+        // body（仅 POST/PUT/PATCH）
+        if (["POST", "PUT", "PATCH"].includes(method) && step.body) {
+          fetchOptions.body = step.body;
+        }
+
+        const res = await fetch(url, fetchOptions);
+        let responseText = "";
+        try { responseText = await res.text(); } catch {}
+
+        if (!res.ok) {
+          await addLog(runId, index, step.type, `✗ HTTP ${res.status} ${res.statusText}`, "error");
+          return { success: false, error: `HTTP ${res.status}: ${responseText.slice(0, 200)}` };
+        }
+
+        const preview = responseText.length > 200 ? responseText.slice(0, 200) + "..." : responseText;
+        await addLog(runId, index, step.type, `✓ HTTP ${res.status} | ${preview}`, "success");
+        return { success: true, output: responseText };
+
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "网络请求失败";
+        await addLog(runId, index, step.type, `✗ ${message}`, "error");
+        return { success: false, error: message };
+      }
     }
 
     // ── WAIT ─────────────────────────────────────────────────
@@ -144,10 +179,28 @@ async function executeStep(
 
     // ── CONDITION ────────────────────────────────────────────
     case "condition": {
-      await addLog(runId, index, step.type, `🔀 评估条件: ${step.condition}`, "info");
-      const result = Math.random() > 0.3 ? "true" : "false";
-      await addLog(runId, index, step.type, `✓ 条件结果 = ${result}`, "success");
-      return { success: true, output: result };
+      const expr = step.condition || "";
+      await addLog(runId, index, step.type, `🔀 评估条件: ${expr}`, "info");
+
+      if (!expr) {
+        await addLog(runId, index, step.type, `⚠ 条件表达式为空，默认 true`, "warn");
+        return { success: true, output: "true" };
+      }
+
+      try {
+        // 安全沙箱：仅提供 output（上一步结果）作为上下文变量
+        // 支持示例：output.includes("success") / output === "true" / Number(output) > 100
+        // eslint-disable-next-line no-new-func
+        const fn = new Function("output", `"use strict"; try { return !!(${expr}); } catch { return false; }`);
+        const result: boolean = fn(prevOutput ?? "");
+        const resultStr = result ? "true" : "false";
+        await addLog(runId, index, step.type, `✓ 条件结果 = ${resultStr}`, "success");
+        return { success: true, output: resultStr };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "表达式执行错误";
+        await addLog(runId, index, step.type, `✗ 条件评估失败: ${message}`, "error");
+        return { success: false, error: `Condition evaluation failed: ${message}` };
+      }
     }
 
     // ── NOTIFY ───────────────────────────────────────────────

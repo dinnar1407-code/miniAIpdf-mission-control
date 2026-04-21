@@ -16,6 +16,8 @@ export interface WorkflowStep {
   // http step
   method?: string;
   url?: string;
+  headers?: Record<string, string>;
+  body?: string;
   // wait step
   delay?: number; // minutes
   // condition step
