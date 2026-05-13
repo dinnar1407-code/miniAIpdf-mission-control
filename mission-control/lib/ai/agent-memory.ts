@@ -5,14 +5,15 @@ import { prisma } from "@/lib/db";
  * @param agentId Agent ID
  * @returns 格式化的记忆字符串，用于拼接到用户消息中
  */
-export async function getAgentMemoryContext(agentId: string): Promise<string> {
+export async function getAgentMemoryContext(agentId: string, projectId?: string): Promise<string> {
   try {
     const memories = await prisma.agentMemory.findMany({
       where: {
         agentId,
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } },
+        // 显示本项目记忆 + 全局记忆（projectId 为 null）
+        ...(projectId ? { OR: [{ projectId }, { projectId: null }] } : {}),
+        AND: [
+          { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
         ],
       },
       orderBy: { updatedAt: "desc" },
@@ -101,16 +102,17 @@ export async function writeAgentMemory(params: {
   type: "experience" | "content" | "kpi" | "task" | "preference";
   key: string;
   value: string;
+  projectId?: string;
   expiresInDays?: number;
 }): Promise<void> {
-  const { agentId, type, key, value, expiresInDays = 30 } = params;
+  const { agentId, type, key, value, projectId, expiresInDays = 30 } = params;
 
   try {
     const expiresAt = expiresInDays === null ? null : new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
 
     await prisma.agentMemory.upsert({
       where: {
-        agentId_type_key: { agentId, type, key },
+        agentId_type_key_projectId: { agentId, type, key, projectId: projectId ?? null },
       },
       update: {
         value,
@@ -122,6 +124,7 @@ export async function writeAgentMemory(params: {
         type,
         key,
         value,
+        projectId: projectId ?? null,
         expiresAt,
       },
     });
@@ -143,7 +146,8 @@ export async function writeAgentMemory(params: {
 export async function extractAndSaveMemory(
   agentId: string,
   output: string,
-  taskType?: string
+  taskType?: string,
+  projectId?: string
 ): Promise<void> {
   if (!output || output.length === 0) {
     return;
@@ -166,6 +170,7 @@ export async function extractAndSaveMemory(
             type: "kpi",
             key: key.toLowerCase(),
             value,
+            projectId,
             expiresInDays: 30,
           });
         }
@@ -187,6 +192,7 @@ export async function extractAndSaveMemory(
           type: "content",
           key: "last_published_title",
           value: titleMatch[1].trim(),
+          projectId,
           expiresInDays: 60,
         });
       }
@@ -200,6 +206,7 @@ export async function extractAndSaveMemory(
           type: "content",
           key: "published_keywords",
           value: keywords,
+          projectId,
           expiresInDays: 60,
         });
       }
@@ -223,6 +230,7 @@ export async function extractAndSaveMemory(
         type: "task",
         key: `published_${Date.now()}`,
         value: `完成 ${taskType} 任务并发布，时间：${new Date().toISOString()}`,
+        projectId,
         expiresInDays: 90,
       });
     }
@@ -242,6 +250,7 @@ export async function extractAndSaveMemory(
           type: memType as "experience" | "content" | "kpi" | "task" | "preference",
           key: `auto_${Date.now()}`,
           value: memValue,
+          projectId,
           expiresInDays: 30,
         });
       }

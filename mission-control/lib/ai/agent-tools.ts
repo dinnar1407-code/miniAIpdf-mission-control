@@ -119,6 +119,74 @@ const TOOLS_PM01: ClaudeTool[] = [
   },
 ];
 
+// PM01-B 专属工具：中文内容平台（小红书 / 抖音 / 微信公众号）
+// 三平台均无公开 API，工具将内容存入 ContentCalendar 草稿，由运营手动发布或审批
+const TOOLS_PM01_B: ClaudeTool[] = [
+  {
+    name: "save_xiaohongshu_draft",
+    description: "将内容保存为小红书笔记草稿。适合图文种草、产品测评、生活方式分享。风格偏口语化，多用 emoji 和话题标签。",
+    input_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "笔记标题（25字以内，吸引点击）" },
+        body:  { type: "string", description: "笔记正文（建议 150-500 字，多段落，加 emoji）" },
+        tags:  { type: "string", description: "话题标签，逗号分隔，如: #好物推荐,#生活好物" },
+      },
+      required: ["title", "body"],
+    },
+  },
+  {
+    name: "save_douyin_script",
+    description: "保存抖音视频脚本草稿。专注视频文案和口播脚本，风格短平快，前3秒必须有钩子。",
+    input_schema: {
+      type: "object",
+      properties: {
+        title:    { type: "string", description: "视频封面标题（15字以内，强钩子）" },
+        hook:     { type: "string", description: "开场钩子（前3秒台词，引发好奇/共鸣）" },
+        script:   { type: "string", description: "完整口播脚本（按镜头/段落分行）" },
+        hashtags: { type: "string", description: "话题标签，逗号分隔" },
+      },
+      required: ["title", "script"],
+    },
+  },
+  {
+    name: "save_wechat_article",
+    description: "将文章保存为微信公众号草稿。适合深度内容、品牌故事、产品教程。",
+    input_schema: {
+      type: "object",
+      properties: {
+        title:   { type: "string", description: "文章标题（30字以内）" },
+        digest:  { type: "string", description: "摘要/副标题（50字以内，显示在列表页）" },
+        content: { type: "string", description: "文章正文（支持 Markdown）" },
+      },
+      required: ["title", "content"],
+    },
+  },
+  {
+    name: "publish_telegram_channel",
+    description: "发布内容到 Telegram 频道（中文用户群）。用于同步推送中文市场内容、活动通知。",
+    input_schema: {
+      type: "object",
+      properties: {
+        text:  { type: "string", description: "消息内容（支持 Markdown）" },
+        title: { type: "string", description: "可选标题" },
+      },
+      required: ["text"],
+    },
+  },
+  {
+    name: "send_notification",
+    description: "通过 Telegram 发送通知给 Terry。用于汇报创作进度或需要审批的内容。",
+    input_schema: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "要发送的消息内容（支持 Markdown）" },
+      },
+      required: ["message"],
+    },
+  },
+];
+
 const TOOLS_DFM: ClaudeTool[] = [
   {
     name: "get_kpi_data",
@@ -372,7 +440,7 @@ export function getAgentTools(agentId: string): ClaudeTool[] {
   const toolMap: Record<string, ClaudeTool[]> = {
     playfish: TOOLS_PLAYFISH,
     pm01:     TOOLS_PM01,
-    "pm01-b": TOOLS_PM01,  // 复用 PM01 工具（中文内容）
+    "pm01-b": TOOLS_PM01_B,
     dfm:      TOOLS_DFM,
     admin01:  TOOLS_ADMIN01,
     furmates: TOOLS_FURMATES,
@@ -790,6 +858,56 @@ export function createToolExecutor(
         return `Tidio 客服概览:\n` +
           `待处理: ${summary.openCount} open / ${summary.pendingCount} pending\n` +
           `最新对话:\n${topLines.join("\n")}`;
+      }
+
+      // ── PM01-B 中文平台工具 ─────────────────────────────────
+      if (name === "save_xiaohongshu_draft") {
+        const title = String(input.title ?? "");
+        const tags  = String(input.tags  ?? "");
+        const body  = `${String(input.body ?? "")}${tags ? `\n\n${tags}` : ""}`;
+        const record = await prisma.contentCalendar.create({
+          data: {
+            title,
+            body,
+            contentType: "short_post",
+            status:      "draft",
+            channelIds:  JSON.stringify(["xiaohongshu"]),
+          },
+        });
+        return `小红书笔记草稿已保存，ID: ${record.id}，标题: "${record.title}"，等待手动发布`;
+      }
+
+      if (name === "save_douyin_script") {
+        const title  = String(input.title  ?? "");
+        const hook   = input.hook ? `【开场钩子】\n${String(input.hook)}\n\n` : "";
+        const tags   = input.hashtags ? `\n\n${String(input.hashtags)}` : "";
+        const body   = `${hook}【口播脚本】\n${String(input.script ?? "")}${tags}`;
+        const record = await prisma.contentCalendar.create({
+          data: {
+            title,
+            body,
+            contentType: "short_post",
+            status:      "draft",
+            channelIds:  JSON.stringify(["douyin"]),
+          },
+        });
+        return `抖音脚本草稿已保存，ID: ${record.id}，标题: "${record.title}"，等待手动发布`;
+      }
+
+      if (name === "save_wechat_article") {
+        const title   = String(input.title   ?? "");
+        const digest  = input.digest ? `【摘要】${String(input.digest)}\n\n` : "";
+        const body    = `${digest}${String(input.content ?? "")}`;
+        const record  = await prisma.contentCalendar.create({
+          data: {
+            title,
+            body,
+            contentType: "article",
+            status:      "draft",
+            channelIds:  JSON.stringify(["wechat"]),
+          },
+        });
+        return `微信公众号文章草稿已保存，ID: ${record.id}，标题: "${record.title}"，等待手动发布`;
       }
 
       return `ERROR: 未知工具 "${name}"`;

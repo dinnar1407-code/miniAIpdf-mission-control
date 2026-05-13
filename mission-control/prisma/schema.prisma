@@ -209,11 +209,12 @@ model AgentMemory {
   type      String
   key       String
   value     String
+  projectId String?
   expiresAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  @@unique([agentId, type, key])
+  @@unique([agentId, type, key, projectId])
 }
 
 model KpiSnapshot {

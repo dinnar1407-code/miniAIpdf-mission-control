@@ -34,7 +34,8 @@ async function executeStep(
   step: WorkflowStep,
   index: number,
   runId: string,
-  prevOutput?: string
+  prevOutput?: string,
+  projectId?: string
 ): Promise<{ success: boolean; output?: string; error?: string }> {
   await addLog(runId, index, step.type, `▶ Starting: ${step.label}`, "info");
 
@@ -51,7 +52,7 @@ async function executeStep(
       const agentModel   = getAgentModel(agentId);
 
       // 执行前：获取 Agent 记忆上下文
-      const memoryContext = await getAgentMemoryContext(agentId);
+      const memoryContext = await getAgentMemoryContext(agentId, projectId);
 
       let userMessage = prevOutput
         ? `上一步输出：\n${prevOutput}\n\n当前任务：${action}`
@@ -92,7 +93,7 @@ async function executeStep(
       }
 
       // 执行后：从输出中提取并保存记忆
-      void extractAndSaveMemory(agentId, output, action);
+      void extractAndSaveMemory(agentId, output, action, projectId);
 
       const preview = output.length > 200 ? output.slice(0, 200) + "..." : output;
       await addLog(runId, index, step.type, `✓ ${agentId} 完成 | ${preview}`, "success");
@@ -149,10 +150,11 @@ async function executeStep(
     // ── WAIT ─────────────────────────────────────────────────
     case "wait": {
       const mins = step.delay || 1;
-      await addLog(runId, index, step.type, `⏱ 模拟等待 ${mins} 分钟`, "info");
-      await new Promise(r => setTimeout(r, Math.min(mins * 100, 2000)));
-      await addLog(runId, index, step.type, `✓ 等待完成`, "success");
-      return { success: true, output: `Waited ${mins} minutes` };
+      const actualMs = Math.min(mins * 100, 2000);
+      await addLog(runId, index, step.type, `⏱ 计划等待 ${mins} 分钟（Vercel 限制，实际约 ${actualMs / 1000} 秒）`, "info");
+      await new Promise(r => setTimeout(r, actualMs));
+      await addLog(runId, index, step.type, `✓ 等待完成（如需真实延迟请接入 Upstash QStash）`, "success");
+      return { success: true, output: `Waited ${mins} minutes (simulated)` };
     }
 
     // ── CONDITION ────────────────────────────────────────────
@@ -363,7 +365,7 @@ export async function executeWorkflow(
         data: { currentStep: i, stepResults: JSON.stringify(stepResults) },
       });
 
-      const result = await executeStep(step, i, run.id, prevOutput);
+      const result = await executeStep(step, i, run.id, prevOutput, workflow.projectId ?? undefined);
 
       if (result.success) {
         stepResults[i] = {
