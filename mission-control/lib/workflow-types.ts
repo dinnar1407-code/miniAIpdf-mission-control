@@ -22,6 +22,8 @@ export interface WorkflowStep {
   delay?: number; // minutes
   // condition step
   condition?: string;
+  nextStepOnTrue?: number;   // 条件为 true 时跳转到的步骤索引（undefined = 下一步）
+  nextStepOnFalse?: number;  // 条件为 false 时跳转到的步骤索引（undefined = 下一步）
   // notify step
   channel?: string;
   message?: string;

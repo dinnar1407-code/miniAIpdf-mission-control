@@ -8,44 +8,7 @@ import { getAgentTools, getAgentModel, createToolExecutor } from "@/lib/ai/agent
 import { createApprovalRequest } from "@/lib/approval";
 import { getAgentMemoryContext, extractAndSaveMemory } from "@/lib/ai/agent-memory";
 import { publishToChannels } from "@/lib/channels/publisher";
-
-// ==================== TELEGRAM HELPER ====================
-
-async function sendTelegram(text: string): Promise<boolean> {
-  // 优先用环境变量，其次读 DB 中的 telegram_notification 配置
-  let token  = process.env.TELEGRAM_BOT_TOKEN;
-  let chatId = process.env.TELEGRAM_CHAT_ID;
-
-  if (!token || !chatId) {
-    try {
-      const cred = await prisma.channelCredential.findUnique({
-        where: { channelId: "telegram_notification" },
-      });
-      if (cred && cred.enabled) {
-        const c = JSON.parse(cred.credentials) as Record<string, string>;
-        token  = token  || c.botToken;
-        chatId = chatId || c.chatId;
-      }
-    } catch {}
-  }
-
-  if (!token || !chatId) return false;
-
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id:    chatId,
-        text:       `🤖 *Jarvis Mission Control*\n\n${text}`,
-        parse_mode: "Markdown",
-      }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
+import { sendTelegram } from "@/lib/telegram";
 
 // ==================== LOG HELPER ====================
 
@@ -381,7 +344,7 @@ export async function executeWorkflow(
   await addLog(run.id, -1, "system", `▶ Workflow "${workflow.name}" 开始执行`, "info");
   await addLog(run.id, -1, "system", `📋 共 ${steps.length} 个步骤`, "info");
 
-  type StepStatus = "pending" | "running" | "completed" | "failed";
+  type StepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
   const stepResults: Array<{
     stepIndex: number; stepId?: string; status: StepStatus;
     startedAt?: string; completedAt?: string; output?: string; error?: string;
@@ -390,7 +353,8 @@ export async function executeWorkflow(
   let prevOutput: string | undefined;
 
   try {
-    for (let i = 0; i < steps.length; i++) {
+    let i = 0;
+    while (i < steps.length) {
       const step = steps[i];
 
       stepResults[i] = { ...stepResults[i], status: "running", startedAt: new Date().toISOString() };
@@ -406,7 +370,22 @@ export async function executeWorkflow(
           ...stepResults[i], status: "completed",
           completedAt: new Date().toISOString(), output: result.output,
         };
-        prevOutput = result.output; // 传递给下一步
+        prevOutput = result.output;
+
+        // Fix 1: condition 步骤支持真正的 if/else 跳转
+        if (step.type === "condition") {
+          const condTrue = result.output === "true";
+          const nextIdx  = condTrue
+            ? (step.nextStepOnTrue  ?? i + 1)
+            : (step.nextStepOnFalse ?? i + 1);
+          // 标记被跳过的步骤
+          for (let j = i + 1; j < nextIdx && j < steps.length; j++) {
+            stepResults[j] = { ...stepResults[j], status: "skipped" as StepStatus, completedAt: new Date().toISOString() };
+          }
+          i = nextIdx;
+        } else {
+          i++;
+        }
       } else {
         stepResults[i] = {
           ...stepResults[i], status: "failed",

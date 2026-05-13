@@ -4,7 +4,7 @@
 export type ClaudeModel =
   | "claude-haiku-4-5-20251001"   // 快速、低成本（日常任务）
   | "claude-sonnet-4-6"           // 均衡（内容创作）
-  | "claude-opus-4-6";            // 最强（复杂分析）
+  | "claude-opus-4-7";            // 最强（复杂分析）
 
 export interface ClaudeMessage {
   role: "user" | "assistant";
@@ -15,9 +15,31 @@ export interface ClaudeResponse {
   success: boolean;
   content: string;
   model: string;
-  usage?: { input_tokens: number; output_tokens: number };
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
   error?: string;
 }
+
+// Fix 6: 429 指数退避重试（最多 3 次：1s → 2s → 4s）
+async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 || attempt === maxRetries) return res;
+    await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+  }
+  return fetch(url, init);
+}
+
+// Fix 4: 所有请求都带 prompt-caching beta header
+const ANTHROPIC_HEADERS = {
+  "anthropic-version": "2023-06-01",
+  "anthropic-beta":    "prompt-caching-2024-07-31",
+  "content-type":      "application/json",
+};
 
 export async function callClaude(
   systemPrompt: string,
@@ -38,23 +60,24 @@ export async function callClaude(
     };
   }
 
-  const model       = options.model      ?? "claude-haiku-4-5-20251001";
-  const maxTokens   = options.maxTokens  ?? 2048;
+  const model     = options.model     ?? "claude-haiku-4-5-20251001";
+  const maxTokens = options.maxTokens ?? 2048;
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    // Fix 4: system 改为数组格式，挂载 cache_control
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: maxTokens,
+      system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+      messages,
+    };
+    // Fix 3: temperature 现在真正传给 API
+    if (options.temperature !== undefined) body.temperature = options.temperature;
+
+    const res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "x-api-key":         apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type":      "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        system:     systemPrompt,
-        messages,
-      }),
+      headers: { "x-api-key": apiKey, ...ANTHROPIC_HEADERS },
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
@@ -65,7 +88,12 @@ export async function callClaude(
     const data = await res.json() as {
       content: Array<{ type: string; text: string }>;
       model: string;
-      usage: { input_tokens: number; output_tokens: number };
+      usage: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_input_tokens?: number;
+        cache_creation_input_tokens?: number;
+      };
     };
 
     const text = data.content?.find(b => b.type === "text")?.text ?? "";
@@ -138,17 +166,14 @@ export async function callClaudeWithTools(
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     let res: Response;
     try {
-      res = await fetch("https://api.anthropic.com/v1/messages", {
+      res = await fetchWithRetry("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: {
-          "x-api-key":         apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type":      "application/json",
-        },
+        headers: { "x-api-key": apiKey, ...ANTHROPIC_HEADERS },
         body: JSON.stringify({
           model,
           max_tokens: 4096,
-          system:     systemPrompt,
+          // Fix 4: system 缓存
+          system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
           tools,
           messages,
         }),
@@ -168,16 +193,13 @@ export async function callClaudeWithTools(
       usage?: { input_tokens: number; output_tokens: number };
     };
 
-    // 把 assistant 回复加入消息历史
     messages.push({ role: "assistant", content: data.content });
 
-    // 任务完成，返回文字
     if (data.stop_reason === "end_turn") {
       const textBlock = data.content.find(b => b.type === "text") as { type: "text"; text: string } | undefined;
       return textBlock?.text ?? "";
     }
 
-    // 工具调用轮次
     if (data.stop_reason === "tool_use") {
       const toolUseBlocks = data.content.filter(b => b.type === "tool_use") as Array<{
         type: "tool_use"; id: string; name: string; input: Record<string, unknown>
@@ -192,6 +214,8 @@ export async function callClaudeWithTools(
         } catch (err) {
           result = `ERROR: ${err instanceof Error ? err.message : "工具执行失败"}`;
         }
+        // Fix 5: 截断过长的工具返回值，防止 context 溢出
+        if (result.length > 4000) result = result.slice(0, 4000) + "\n...[已截断，超出 4000 字符]";
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
       }
 
@@ -199,7 +223,6 @@ export async function callClaudeWithTools(
       continue;
     }
 
-    // 非预期的 stop_reason
     break;
   }
 

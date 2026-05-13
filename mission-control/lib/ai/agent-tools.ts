@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/db";
 import { ClaudeTool, ToolExecutor } from "@/lib/ai/claude-client";
+import { sendTelegram } from "@/lib/telegram";
 import { publishToChannels } from "@/lib/channels/publisher";
 import { ChannelId, PublishContent } from "@/lib/channels/types";
 import { getShopifyClient } from "@/lib/integrations/shopify";
@@ -46,7 +47,7 @@ const TOOLS_PLAYFISH: ClaudeTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        days: { type: "string", description: "查询最近多少天的数据，默认 7" },
+        days: { type: "number", description: "查询最近多少天的数据，默认 7" },
       },
     },
   },
@@ -126,7 +127,7 @@ const TOOLS_DFM: ClaudeTool[] = [
       type: "object",
       properties: {
         metrics: { type: "string", description: "指标名称，逗号分隔。可选值: mrr, users, signups, pageviews, api_calls, active_subscriptions, gsc_clicks, gsc_impressions, ga_sessions" },
-        days:    { type: "string", description: "查询最近多少天，默认 7" },
+        days:    { type: "number", description: "查询最近多少天，默认 7" },
       },
     },
   },
@@ -153,7 +154,7 @@ const TOOLS_ADMIN01: ClaudeTool[] = [
       type: "object",
       properties: {
         url:     { type: "string",  description: "要检查的 URL，如 https://miniaipdf.com" },
-        timeout: { type: "string",  description: "超时时间（毫秒），默认 5000" },
+        timeout: { type: "number",  description: "超时时间（毫秒），默认 5000" },
       },
       required: ["url"],
     },
@@ -177,8 +178,8 @@ const TOOLS_ADMIN01: ClaudeTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        hours: { type: "string", description: "查询最近多少小时内的错误，默认 24" },
-        limit: { type: "string", description: "返回条数上限，默认 20" },
+        hours: { type: "number", description: "查询最近多少小时内的错误，默认 24" },
+        limit: { type: "number", description: "返回条数上限，默认 20" },
       },
     },
   },
@@ -193,7 +194,7 @@ const TOOLS_FURMATES: ClaudeTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        days: { type: "string", description: "统计最近多少天，默认 7" },
+        days: { type: "number", description: "统计最近多少天，默认 7" },
       },
     },
   },
@@ -204,7 +205,7 @@ const TOOLS_FURMATES: ClaudeTool[] = [
       type: "object",
       properties: {
         status: { type: "string", description: "订单状态: open / closed / cancelled / any，默认 open", enum: ["open", "closed", "cancelled", "any"] },
-        limit:  { type: "string", description: "返回条数上限，默认 20" },
+        limit:  { type: "number", description: "返回条数上限，默认 20" },
       },
     },
   },
@@ -262,7 +263,7 @@ const TOOLS_FURMATES: ClaudeTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        threshold: { type: "string", description: "库存阈值，低于此数量视为低库存，默认 10" },
+        threshold: { type: "number", description: "库存阈值，低于此数量视为低库存，默认 10" },
       },
     },
   },
@@ -273,7 +274,7 @@ const TOOLS_FURMATES: ClaudeTool[] = [
       type: "object",
       properties: {
         status: { type: "string", description: "产品状态: active / draft / archived，默认 active", enum: ["active", "draft", "archived"] },
-        limit:  { type: "string", description: "返回条数，默认 20" },
+        limit:  { type: "number", description: "返回条数，默认 20" },
       },
     },
   },
@@ -318,7 +319,7 @@ const TOOLS_FURMATES: ClaudeTool[] = [
       type: "object",
       properties: {
         status: { type: "string", description: "对话状态: open / solved / pending，默认 open", enum: ["open", "solved", "pending"] },
-        limit:  { type: "string", description: "返回条数，默认 10" },
+        limit:  { type: "number", description: "返回条数，默认 10" },
       },
     },
   },
@@ -387,29 +388,6 @@ export function getAgentModel(agentId: string): "claude-haiku-4-5-20251001" | "c
 
 // ==================== 工具执行器 ====================
 
-async function sendTelegramHelper(text: string): Promise<boolean> {
-  let token  = process.env.TELEGRAM_BOT_TOKEN;
-  let chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) {
-    try {
-      const cred = await prisma.channelCredential.findUnique({ where: { channelId: "telegram_notification" } });
-      if (cred?.enabled) {
-        const c = JSON.parse(cred.credentials) as Record<string, string>;
-        token  = token  || c.botToken;
-        chatId = chatId || c.chatId;
-      }
-    } catch {}
-  }
-  if (!token || !chatId) return false;
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: `🤖 *Jarvis*\n\n${text}`, parse_mode: "Markdown" }),
-    });
-    return res.ok;
-  } catch { return false; }
-}
 
 /**
  * 创建指定 Agent 的工具执行器
@@ -438,7 +416,7 @@ export function createToolExecutor(
       }
 
       if (name === "get_metrics_summary") {
-        const days = parseInt(String(input.days ?? "7"), 10);
+        const days = Number(input.days ?? 7);
         const since = new Date(Date.now() - days * 86400_000);
         const snapshots = await prisma.kpiSnapshot.findMany({
           where: { date: { gte: since } },
@@ -459,7 +437,7 @@ export function createToolExecutor(
 
       if (name === "send_notification") {
         const msg = String(input.message ?? "");
-        const sent = await sendTelegramHelper(msg);
+        const sent = await sendTelegram(msg);
         return sent ? "Telegram 通知发送成功" : "Telegram 发送失败（请检查 TELEGRAM_BOT_TOKEN 配置）";
       }
 
@@ -514,7 +492,7 @@ export function createToolExecutor(
 
       // ── DFM 工具 ───────────────────────────────────────────
       if (name === "get_kpi_data") {
-        const days = parseInt(String(input.days ?? "7"), 10);
+        const days  = Number(input.days ?? 7);
         const since = new Date(Date.now() - days * 86400_000);
         const requestedMetrics = String(input.metrics ?? "").split(",").map(m => m.trim()).filter(Boolean);
 
@@ -525,15 +503,25 @@ export function createToolExecutor(
         const snapshots = await prisma.kpiSnapshot.findMany({
           where,
           orderBy: [{ metric: "asc" }, { date: "desc" }],
-          take: 200,
         });
 
         if (snapshots.length === 0) return "查询范围内无 KPI 数据。";
 
-        const lines = snapshots.map(s =>
-          `${s.date.toISOString().split("T")[0]} | ${s.metric}: ${s.value.toFixed(2)}${s.delta ? ` (${s.delta > 0 ? "+" : ""}${s.delta.toFixed(2)})` : ""}`
-        );
-        return `${lines.length} 条 KPI 记录:\n${lines.join("\n")}`;
+        // Fix 5: 按 metric 聚合再返回，不返回原始行，避免 context 溢出
+        const grouped = snapshots.reduce<Record<string, typeof snapshots>>((acc, s) => {
+          (acc[s.metric] ??= []).push(s);
+          return acc;
+        }, {});
+
+        const lines = Object.entries(grouped).map(([metric, rows]) => {
+          const latest = rows[0];
+          const avg    = rows.reduce((sum, r) => sum + r.value, 0) / rows.length;
+          const trend  = rows.length > 1 ? latest.value - rows[rows.length - 1].value : 0;
+          const trendStr = trend > 0 ? `↑${trend.toFixed(2)}` : trend < 0 ? `↓${Math.abs(trend).toFixed(2)}` : "→";
+          return `${metric}: 最新=${latest.value.toFixed(2)} | ${days}日均值=${avg.toFixed(2)} | 趋势${trendStr} (${rows.length}条)`;
+        });
+
+        return `KPI 摘要（最近 ${days} 天，共 ${Object.keys(grouped).length} 项指标）:\n${lines.join("\n")}`;
       }
 
       if (name === "save_kpi_report") {
@@ -554,7 +542,7 @@ export function createToolExecutor(
 
         if (sendTg) {
           const preview = report.length > 3000 ? report.slice(0, 3000) + "\n...[已截断]" : report;
-          await sendTelegramHelper(preview);
+          await sendTelegram(preview);
         }
 
         return `${reportType === "weekly" ? "周报" : "日报"}已保存${sendTg ? "并发送到 Telegram" : "，未发送 Telegram"}`;
@@ -563,7 +551,7 @@ export function createToolExecutor(
       // ── Admin01 工具 ────────────────────────────────────────
       if (name === "check_url_health") {
         const url     = String(input.url     ?? "");
-        const timeout = parseInt(String(input.timeout ?? "5000"), 10);
+        const timeout = Number(input.timeout ?? 5000);
 
         if (!url) return "ERROR: url 参数不能为空";
 
@@ -597,14 +585,14 @@ export function createToolExecutor(
         });
 
         const emoji = severity === "critical" ? "🚨" : severity === "warning" ? "⚠️" : "ℹ️";
-        await sendTelegramHelper(`${emoji} *[${severity.toUpperCase()}]* ${message}\n来源: ${source}`);
+        await sendTelegram(`${emoji} *[${severity.toUpperCase()}]* ${message}\n来源: ${source}`);
 
         return `告警已创建并通知 Telegram，级别: ${severity}`;
       }
 
       if (name === "get_recent_errors") {
-        const hours = parseInt(String(input.hours ?? "24"), 10);
-        const limit = parseInt(String(input.limit ?? "20"), 10);
+        const hours = Number(input.hours ?? 24);
+        const limit = Number(input.limit ?? 20);
         const since = new Date(Date.now() - hours * 3600_000);
 
         const errors = await prisma.workflowLog.findMany({
@@ -625,7 +613,7 @@ export function createToolExecutor(
       if (name === "get_shopify_summary") {
         const shopify = await getShopifyClient();
         if (!shopify) return "ERROR: Shopify 未配置（请在 Settings → Channels 添加 shopify 渠道凭证或设置 SHOPIFY_SHOP_DOMAIN + SHOPIFY_ACCESS_TOKEN）";
-        const days    = parseInt(String(input.days ?? "7"), 10);
+        const days    = Number(input.days ?? 7);
         const summary = await shopify.getOrderSummary(days);
         return `FurMates 最近 ${days} 天销售摘要：\n` +
           `订单数: ${summary.totalOrders}\n` +
@@ -639,7 +627,7 @@ export function createToolExecutor(
         if (!shopify) return "ERROR: Shopify 未配置";
         const { orders } = await shopify.listOrders({
           status: String(input.status ?? "open"),
-          limit:  parseInt(String(input.limit ?? "20"), 10),
+          limit:  Number(input.limit ?? 20),
         });
         if (!orders.length) return "没有找到符合条件的订单";
         const lines = orders.map(o =>
@@ -702,7 +690,7 @@ export function createToolExecutor(
       if (name === "check_low_stock") {
         const shopify   = await getShopifyClient();
         if (!shopify) return "ERROR: Shopify 未配置";
-        const threshold = parseInt(String(input.threshold ?? "10"), 10);
+        const threshold = Number(input.threshold ?? 10);
         const { inventory_levels } = await shopify.getInventoryLevels();
         const low = inventory_levels.filter(l => l.available <= threshold);
         if (!low.length) return `✅ 所有商品库存均高于 ${threshold} 件`;
@@ -715,7 +703,7 @@ export function createToolExecutor(
         if (!shopify) return "ERROR: Shopify 未配置";
         const { products } = await shopify.listProducts({
           status: String(input.status ?? "active"),
-          limit:  parseInt(String(input.limit ?? "20"), 10),
+          limit:  Number(input.limit ?? 20),
         });
         if (!products.length) return "没有找到产品";
         const lines = products.map(p =>
@@ -760,7 +748,7 @@ export function createToolExecutor(
       // ── Tidio 客服工具 ─────────────────────────────────────
       if (name === "list_tidio_conversations") {
         const status = String(input.status ?? "open") as "open" | "solved" | "pending";
-        const limit  = parseInt(String(input.limit ?? "10"), 10);
+        const limit  = Number(input.limit ?? 10);
         const { conversations, total } = await listConversations({ status, limit });
         if (!conversations.length) return `没有 ${status} 状态的对话`;
         const lines = conversations.map(c => {
