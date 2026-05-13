@@ -3,9 +3,9 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Seeding database...");
+  console.log("🌱 Seeding Mission Control...\n");
 
-  // Projects
+  // --- Projects ---
   const projects = await Promise.all([
     prisma.project.upsert({
       where: { slug: "miniaipdf" },
@@ -13,21 +13,21 @@ async function main() {
       create: {
         name: "MiniAIPDF",
         slug: "miniaipdf",
-        description: "AI-powered PDF SaaS tool",
-        color: "#3B82F6",
+        description: "在线 PDF 工具平台，压缩/合并/拆分/转换",
+        color: "#EF4444",
         emoji: "📄",
         status: "active",
       },
     }),
     prisma.project.upsert({
-      where: { slug: "furmales" },
+      where: { slug: "furm8s" },
       update: {},
       create: {
         name: "FurMates",
-        slug: "furmales",
-        description: "Pet supplies e-commerce store",
-        color: "#10B981",
-        emoji: "🛒",
+        slug: "furm8s",
+        description: "宠物社交与领养平台",
+        color: "#F97316",
+        emoji: "🐾",
         status: "active",
       },
     }),
@@ -37,9 +37,9 @@ async function main() {
       create: {
         name: "NIW",
         slug: "niw",
-        description: "National Interest Waiver petition",
-        color: "#F59E0B",
-        emoji: "📝",
+        description: "国家利益豁免移民申请材料准备",
+        color: "#8B5CF6",
+        emoji: "🛂",
         status: "active",
       },
     }),
@@ -49,8 +49,8 @@ async function main() {
       create: {
         name: "Talengineer",
         slug: "talengineer",
-        description: "Engineering talent matchmaker",
-        color: "#8B5CF6",
+        description: "开发者工具与开源项目",
+        color: "#06B6D4",
         emoji: "🔧",
         status: "active",
       },
@@ -59,11 +59,11 @@ async function main() {
       where: { slug: "wheatcoin" },
       update: {},
       create: {
-        name: "wheatcoin",
+        name: "wheatcoin-community",
         slug: "wheatcoin",
-        description: "Crypto community & SDK",
-        color: "#F97316",
-        emoji: "🪙",
+        description: "社区运营与内容平台",
+        color: "#EAB308",
+        emoji: "🌾",
         status: "active",
       },
     }),
@@ -71,19 +71,18 @@ async function main() {
       where: { slug: "dinnar" },
       update: {},
       create: {
-        name: "Dinnar",
+        name: "Dinnar AI",
         slug: "dinnar",
-        description: "Industrial operations",
-        color: "#EF4444",
-        emoji: "🏭",
+        description: "OPC 视觉开发平台 — 工业机器视觉算法引擎",
+        color: "#3B82F6",
+        emoji: "🔬",
         status: "active",
       },
     }),
   ]);
+  console.log(`✅ ${projects.length} Projects created`);
 
-  console.log(`✅ Created ${projects.length} projects`);
-
-  // Agents
+  // --- Agents ---
   const agents = await Promise.all([
     prisma.agent.upsert({
       where: { id: "agent-playfish" },
@@ -93,8 +92,8 @@ async function main() {
         name: "Playfish",
         type: "ceo",
         status: "active",
-        currentTask: "Reviewing MiniAIPDF growth metrics",
-        config: JSON.stringify({ emoji: "🌾", role: "CEO Agent" }),
+        currentTask: "监督全局运营",
+        config: JSON.stringify({ role: "CEO", channel: "telegram" }),
       },
     }),
     prisma.agent.upsert({
@@ -102,23 +101,11 @@ async function main() {
       update: {},
       create: {
         id: "agent-pm01",
-        name: "PM01",
-        type: "content",
+        name: "PM01 小研",
+        type: "operations",
         status: "active",
-        currentTask: "Publishing Twitter thread for MiniAIPDF",
-        config: JSON.stringify({ emoji: "📝", role: "Content Agent" }),
-      },
-    }),
-    prisma.agent.upsert({
-      where: { id: "agent-pm01b" },
-      update: {},
-      create: {
-        id: "agent-pm01b",
-        name: "PM01-B",
-        type: "content",
-        status: "idle",
-        currentTask: null,
-        config: JSON.stringify({ emoji: "📝", role: "Content Agent B" }),
+        currentTask: "OPC 视觉平台研发调研",
+        config: JSON.stringify({ role: "CTO/研究员", channel: "webchat" }),
       },
     }),
     prisma.agent.upsert({
@@ -129,8 +116,8 @@ async function main() {
         name: "Admin01",
         type: "operations",
         status: "active",
-        currentTask: "Processing NIW document reminders",
-        config: JSON.stringify({ emoji: "🔧", role: "Operations Agent" }),
+        currentTask: "MiniAIPDF 运维",
+        config: JSON.stringify({ role: "系统运维", channel: "webchat" }),
       },
     }),
     prisma.agent.upsert({
@@ -139,189 +126,283 @@ async function main() {
       create: {
         id: "agent-dfm",
         name: "DFM",
+        type: "content",
+        status: "active",
+        currentTask: "内容营销与增长",
+        config: JSON.stringify({ role: "内容/增长", channel: "webchat" }),
+      },
+    }),
+    prisma.agent.upsert({
+      where: { id: "agent-caishen" },
+      update: {},
+      create: {
+        id: "agent-caishen",
+        name: "Caishen 财神",
         type: "data",
-        status: "idle",
-        currentTask: null,
-        config: JSON.stringify({ emoji: "📊", role: "Data & Finance Agent" }),
+        status: "active",
+        currentTask: "财务数据分析",
+        config: JSON.stringify({ role: "数据分析", channel: "webchat" }),
       },
     }),
   ]);
+  console.log(`✅ ${agents.length} Agents created`);
 
-  console.log(`✅ Created ${agents.length} agents`);
+  // --- Agent Assignments ---
+  const assignments = [
+    { agentId: "agent-playfish", projectSlug: "dinnar", role: "primary" },
+    { agentId: "agent-pm01", projectSlug: "dinnar", role: "primary" },
+    { agentId: "agent-pm01", projectSlug: "miniaipdf", role: "contributor" },
+    { agentId: "agent-pm01", projectSlug: "talengineer", role: "contributor" },
+    { agentId: "agent-admin01", projectSlug: "miniaipdf", role: "primary" },
+    { agentId: "agent-dfm", projectSlug: "furm8s", role: "primary" },
+    { agentId: "agent-dfm", projectSlug: "wheatcoin", role: "primary" },
+    { agentId: "agent-dfm", projectSlug: "miniaipdf", role: "contributor" },
+    { agentId: "agent-caishen", projectSlug: "niw", role: "primary" },
+    { agentId: "agent-caishen", projectSlug: "miniaipdf", role: "contributor" },
+    { agentId: "agent-playfish", projectSlug: "miniaipdf", role: "primary" },
+    { agentId: "agent-playfish", projectSlug: "niw", role: "primary" },
+  ];
 
-  // Sample Tasks
-  const miniProject = projects[0];
-  const furProject = projects[1];
-
-  await prisma.task.createMany({
-    skipDuplicates: true,
-    data: [
-      {
-        title: "Launch Product Hunt campaign",
-        description: "Prepare assets, schedule launch, monitor comments",
-        status: "in_progress",
-        priority: "urgent",
-        projectId: miniProject.id,
-        agentId: "agent-playfish",
-      },
-      {
-        title: "Write 5 SEO blog posts",
-        description: "Target keywords: pdf editor, compress pdf, merge pdf",
-        status: "todo",
-        priority: "high",
-        projectId: miniProject.id,
-        agentId: "agent-pm01",
-      },
-      {
-        title: "Set up Shopify abandoned cart emails",
-        status: "review",
-        priority: "medium",
-        projectId: furProject.id,
-        agentId: "agent-admin01",
-      },
-      {
-        title: "Update NIW petition letter",
-        description: "Add recent publications and citations",
-        status: "todo",
-        priority: "high",
-        projectId: projects[2].id,
-        agentId: "agent-playfish",
-      },
-      {
-        title: "API documentation update",
-        status: "done",
-        priority: "medium",
-        projectId: miniProject.id,
-        agentId: "agent-pm01",
-      },
-      {
-        title: "Fix checkout bug on mobile",
-        status: "blocked",
-        priority: "urgent",
-        projectId: furProject.id,
-      },
-      {
-        title: "Wheatcoin SDK v2 release notes",
-        status: "in_progress",
-        priority: "medium",
-        projectId: projects[4].id,
-        agentId: "agent-dfm",
-      },
-    ],
-  });
-
-  console.log("✅ Created sample tasks");
-
-  // Sample Alerts
-  await prisma.alert.createMany({
-    skipDuplicates: true,
-    data: [
-      {
-        severity: "critical",
-        source: "platform",
-        message: "Product Hunt launch detected — agents on standby",
-        status: "new",
-        projectId: miniProject.id,
-      },
-      {
-        severity: "warning",
-        source: "system",
-        message: "API error rate elevated (2.3%) — monitoring",
-        status: "acknowledged",
-        projectId: miniProject.id,
-      },
-      {
-        severity: "info",
-        source: "agent",
-        message: "NIW deadline in 3 days — review required",
-        status: "new",
-        projectId: projects[2].id,
-      },
-      {
-        severity: "warning",
-        source: "platform",
-        message: "FurMates Shopify: 3 abandoned carts in last hour",
-        status: "new",
-        projectId: furProject.id,
-      },
-    ],
-  });
-
-  console.log("✅ Created sample alerts");
-
-  // Sample Activity Logs
-  await prisma.activityLog.createMany({
-    data: [
-      {
-        agentId: "agent-pm01",
-        action: "published",
-        target: "Twitter thread",
-        result: "12 retweets, 45 likes",
-        projectId: miniProject.id,
-        timestamp: new Date(Date.now() - 2 * 60 * 1000),
-      },
-      {
-        agentId: "agent-playfish",
-        action: "replied",
-        target: "Customer email",
-        result: "Resolved — upgrade offer sent",
-        projectId: furProject.id,
-        timestamp: new Date(Date.now() - 15 * 60 * 1000),
-      },
-      {
-        agentId: "agent-admin01",
-        action: "sent reminder",
-        target: "Terry",
-        result: "NIW petition review needed",
-        projectId: projects[2].id,
-        timestamp: new Date(Date.now() - 60 * 60 * 1000),
-      },
-      {
-        agentId: "agent-dfm",
-        action: "updated",
-        target: "wheatcoin SDK docs",
-        result: "v2.1.0 release notes published",
-        projectId: projects[4].id,
-        timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      },
-      {
-        agentId: "agent-playfish",
-        action: "drafted",
-        target: "CFO report",
-        result: "Q1 summary ready for review",
-        projectId: projects[5].id,
-        timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000),
-      },
-    ],
-  });
-
-  console.log("✅ Created activity logs");
-
-  // Sample Metrics
-  const days = 14;
-  const metricData = [];
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    metricData.push(
-      { date, platform: "miniaipdf", metric: "mrr", value: 1100 + Math.random() * 200, projectId: miniProject.id },
-      { date, platform: "miniaipdf", metric: "users", value: 2700 + Math.random() * 200, projectId: miniProject.id },
-      { date, platform: "miniaipdf", metric: "api_calls", value: 45000 + Math.random() * 10000, projectId: miniProject.id },
-      { date, platform: "furmales", metric: "mrr", value: 800 + Math.random() * 150, projectId: furProject.id },
-      { date, platform: "furmales", metric: "users", value: 1200 + Math.random() * 100, projectId: furProject.id }
-    );
+  for (const a of assignments) {
+    const project = projects.find((p) => p.slug === a.projectSlug);
+    if (!project) continue;
+    await prisma.agentAssignment.upsert({
+      where: { agentId_projectId: { agentId: a.agentId, projectId: project.id } },
+      update: {},
+      create: { agentId: a.agentId, projectId: project.id, role: a.role },
+    });
   }
+  console.log(`✅ ${assignments.length} Agent Assignments created`);
 
-  await prisma.metricSnapshot.createMany({ data: metricData });
-  console.log("✅ Created metric snapshots");
+  // --- Tasks ---
+  const dinnarProject = projects.find((p) => p.slug === "dinnar")!;
+  const miniProject = projects.find((p) => p.slug === "miniaipdf")!;
+  const niwProject = projects.find((p) => p.slug === "niw")!;
 
-  console.log("\n🚀 Seed complete! Playfish Mission Control is ready.");
+  const tasks = await Promise.all([
+    prisma.task.create({
+      data: {
+        title: "HALCON 26.05 发布解析",
+        description: "5.20 HALCON 26.05 发布后第一时间做技术拆解",
+        status: "todo",
+        priority: "urgent",
+        projectId: dinnarProject.id,
+        agentId: "agent-pm01",
+        dueDate: new Date("2026-05-21"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        title: "C++ 构建环境搭建",
+        description: "安装 Xcode CLT + CMake + vcpkg，搭建 OPC 可编译环境",
+        status: "todo",
+        priority: "high",
+        projectId: dinnarProject.id,
+        agentId: "agent-pm01",
+      },
+    }),
+    prisma.task.create({
+      data: {
+        title: "MiniAIPDF 404页面修复",
+        description: "compress/merge/split/pdf-to-word/word-to-pdf/pdf-to-excel/excel-to-pdf 七个页面修复",
+        status: "done",
+        priority: "urgent",
+        projectId: miniProject.id,
+        agentId: "agent-pm01",
+        completedAt: new Date("2026-05-13"),
+      },
+    }),
+    prisma.task.create({
+      data: {
+        title: "MiniAIPDF Vercel 部署验证",
+        description: "推送代码并验证7个新页面线上正常",
+        status: "review",
+        priority: "high",
+        projectId: miniProject.id,
+        agentId: "agent-admin01",
+      },
+    }),
+    prisma.task.create({
+      data: {
+        title: "NIW Petition Letter 终稿",
+        description: "润色 NIW Petition Letter 最终版本",
+        status: "in_progress",
+        priority: "high",
+        projectId: niwProject.id,
+        agentId: "agent-caishen",
+      },
+    }),
+  ]);
+  console.log(`✅ ${tasks.length} Tasks created`);
+
+  // --- Activity Logs ---
+  const logs = await Promise.all([
+    prisma.activityLog.create({
+      data: {
+        agentId: "agent-pm01",
+        action: "report_generated",
+        target: "竞品情报双周报告",
+        result: "success",
+        projectId: dinnarProject.id,
+        timestamp: new Date("2026-05-12T08:00:00"),
+      },
+    }),
+    prisma.activityLog.create({
+      data: {
+        agentId: "agent-pm01",
+        action: "bug_fixed",
+        target: "MiniAIPDF 7个404页面",
+        result: "success",
+        projectId: miniProject.id,
+        timestamp: new Date("2026-05-13T01:00:00"),
+      },
+    }),
+    prisma.activityLog.create({
+      data: {
+        agentId: "agent-pm01",
+        action: "research_completed",
+        target: "机器视觉行业全景分析报告",
+        result: "success",
+        projectId: dinnarProject.id,
+        timestamp: new Date("2026-05-13T02:00:00"),
+      },
+    }),
+    prisma.activityLog.create({
+      data: {
+        agentId: "agent-playfish",
+        action: "database_setup",
+        target: "Jarvis PostgreSQL (Neon)",
+        result: "success",
+        projectId: null,
+        timestamp: new Date("2026-05-13T01:10:00"),
+      },
+    }),
+  ]);
+  console.log(`✅ ${logs.length} Activity Logs created`);
+
+  // --- Metric Snapshots ---
+  const metrics = await Promise.all([
+    prisma.metricSnapshot.create({
+      data: {
+        date: new Date("2026-05-12"),
+        platform: "all",
+        metric: "active_projects",
+        value: 6,
+        projectId: null,
+      },
+    }),
+    prisma.metricSnapshot.create({
+      data: {
+        date: new Date("2026-05-12"),
+        platform: "all",
+        metric: "active_agents",
+        value: 5,
+        projectId: null,
+      },
+    }),
+    prisma.metricSnapshot.create({
+      data: {
+        date: new Date("2026-05-12"),
+        platform: "all",
+        metric: "tasks_completed",
+        value: 3,
+        projectId: null,
+      },
+    }),
+    prisma.metricSnapshot.create({
+      data: {
+        date: new Date("2026-05-12"),
+        platform: "web",
+        metric: "traffic",
+        value: 0,
+        metadata: JSON.stringify({ note: "待接入 GA" }),
+        projectId: miniProject.id,
+      },
+    }),
+  ]);
+  console.log(`✅ ${metrics.length} Metric Snapshots created`);
+
+  // --- Preset Workflows ---
+  const workflows = await Promise.all([
+    prisma.workflow.upsert({
+      where: { id: "wf-pulse" },
+      update: {},
+      create: {
+        id: "wf-pulse",
+        name: "L0-脉搏扫描",
+        description: "每15分钟扫描 BTC/ETH 价格 + 资金费率",
+        trigger: "cron",
+        cronExpression: "*/15 * * * *",
+        targetAgent: "caishen",
+        status: "active",
+        taskTemplate: { message: "📊 L0脉搏扫描：获取BTC/ETH当前价格和主要交易所资金费率", timeoutSeconds: 60 },
+      },
+    }),
+    prisma.workflow.upsert({
+      where: { id: "wf-scan" },
+      update: {},
+      create: {
+        id: "wf-scan",
+        name: "L1-全币种扫描",
+        description: "每小时全交易所费率对比",
+        trigger: "cron",
+        cronExpression: "0 * * * *",
+        targetAgent: "caishen",
+        status: "active",
+        taskTemplate: { message: "📊 L1全币种扫描：全交易所资金费率对比分析", timeoutSeconds: 90 },
+      },
+    }),
+    prisma.workflow.upsert({
+      where: { id: "wf-heartbeat" },
+      update: {},
+      create: {
+        id: "wf-heartbeat",
+        name: "全员心跳审计",
+        description: "每小时ping所有Agent确认存活",
+        trigger: "cron",
+        cronExpression: "0 * * * *",
+        targetAgent: "playfish",
+        status: "active",
+        taskTemplate: { message: "🫀 心跳审计：检查PM01/Admin01/DFM/Caishen上次活跃时间，超时告警", timeoutSeconds: 30 },
+      },
+    }),
+    prisma.workflow.upsert({
+      where: { id: "wf-battle-report" },
+      update: {},
+      create: {
+        id: "wf-battle-report",
+        name: "战报自动补报",
+        description: "每天凌晨5分钟检查当日战报是否生成，未生成则通知补写",
+        trigger: "cron",
+        cronExpression: "5 0 * * *",
+        targetAgent: "playfish",
+        status: "active",
+        taskTemplate: { message: "📋 战报补报检查：所有Agent昨日战报是否已写入？缺失则通知", timeoutSeconds: 30 },
+      },
+    }),
+    prisma.workflow.upsert({
+      where: { id: "wf-brain" },
+      update: {},
+      create: {
+        id: "wf-brain",
+        name: "第二大脑聚合",
+        description: "每天凌晨30分聚合所有Agent知识到第二大脑",
+        trigger: "cron",
+        cronExpression: "30 0 * * *",
+        targetAgent: "playfish",
+        status: "active",
+        taskTemplate: { message: "🧠 第二大脑聚合：同步Obsidian/知识库更新，索引今日新增内容", timeoutSeconds: 60 },
+      },
+    }),
+  ]);
+  console.log(`✅ ${workflows.length} Preset Workflows created`);
+
+  console.log("\n🎉 Seed complete!");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .finally(() => prisma.$disconnect());

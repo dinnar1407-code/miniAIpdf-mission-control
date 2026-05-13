@@ -67,8 +67,9 @@ model Task {
   updatedAt   DateTime  @updatedAt
   completedAt DateTime?
 
-  project Project? @relation(fields: [projectId], references: [id])
-  agent   Agent?   @relation(fields: [agentId], references: [id])
+  project       Project?        @relation(fields: [projectId], references: [id])
+  agent         Agent?          @relation(fields: [agentId], references: [id])
+  workflowRuns  WorkflowRun[]
 }
 
 model ContentItem {
@@ -128,16 +129,19 @@ model ActivityLog {
 }
 
 model Workflow {
-  id            String   @id @default(cuid())
-  name          String
-  description   String?
-  triggerType   String   @default("manual")
-  triggerConfig String   @default("{}")
-  steps         String   @default("[]")
-  status        String   @default("draft")
-  projectId     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  triggerType    String   @default("manual")
+  triggerConfig  String   @default("{}")
+  cronExpression String?
+  targetAgent    String?
+  taskTemplate   Json     @default("{}")
+  steps          String   @default("[]")
+  status         String   @default("draft")
+  projectId      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   project Project?      @relation(fields: [projectId], references: [id])
   runs    WorkflowRun[]
@@ -147,14 +151,18 @@ model WorkflowRun {
   id          String    @id @default(cuid())
   workflowId  String
   workflow    Workflow  @relation(fields: [workflowId], references: [id])
-  status      String    @default("pending")
+  status      String    @default("pending") // pending, running, done, failed
   currentStep Int       @default(0)
   totalSteps  Int       @default(0)
   startedAt   DateTime?
   completedAt DateTime?
+  duration    Int?
   triggerData String    @default("{}")
   stepResults String    @default("[]")
+  result      String?
   error       String?
+  taskId      String?
+  task        Task?     @relation(fields: [taskId], references: [id])
   createdAt   DateTime  @default(now())
 
   logs WorkflowLog[]
