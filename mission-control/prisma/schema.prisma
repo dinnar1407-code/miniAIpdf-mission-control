@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 model Project {
@@ -24,6 +26,14 @@ model Project {
   agentAssignments AgentAssignment[]
   workflows        Workflow[]
   kpiSnapshots     KpiSnapshot[]
+
+  // Autopilot 反向关系
+  goals     Goal[]
+  insights  Insight[]
+  plans     Plan[]
+  missions  Mission[]
+  memories  Memory[]
+  playbooks Playbook[]
 }
 
 model Agent {
@@ -67,9 +77,9 @@ model Task {
   updatedAt   DateTime  @updatedAt
   completedAt DateTime?
 
-  project       Project?        @relation(fields: [projectId], references: [id])
-  agent         Agent?          @relation(fields: [agentId], references: [id])
-  workflowRuns  WorkflowRun[]
+  project      Project?      @relation(fields: [projectId], references: [id])
+  agent        Agent?        @relation(fields: [agentId], references: [id])
+  workflowRuns WorkflowRun[]
 }
 
 model ContentItem {
@@ -136,7 +146,7 @@ model Workflow {
   triggerConfig  String   @default("{}")
   cronExpression String?
   targetAgent    String?
-  taskTemplate   Json     @default("{}")
+  taskTemplate   String   @default("{}")
   steps          String   @default("[]")
   status         String   @default("draft")
   projectId      String?
@@ -262,4 +272,306 @@ model ApprovalRequest {
   respondedAt   DateTime?
   respondedBy   String?
   createdAt     DateTime  @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTOPILOT LAYER — 仅新增，不修改上方任何现有模型
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 1. GOAL — KPI 锚点
+model Goal {
+  id        String  @id @default(cuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  kpi       String
+  unit      String
+  baseline  Float
+  target    Float
+  current   Float?
+  currentAt DateTime?
+  deadline  DateTime
+  cadence   String
+  status    GoalStatus @default(on_track)
+
+  insights Insight[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, kpi])
+  @@index([status])
+}
+
+enum GoalStatus {
+  on_track
+  at_risk
+  achieved
+  missed
+}
+
+// 2. INSIGHT — Observer 产出，Planner 输入
+model Insight {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id])
+
+  type            InsightType
+  severity        Severity
+  title           String
+  summary         String      @db.Text
+  evidence        Json
+  suggestedAction String?     @db.Text
+
+  status InsightStatus @default(new)
+
+  plans Plan[]
+
+  observedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([status, severity, createdAt])
+  @@index([projectId, createdAt])
+}
+
+enum InsightType {
+  anomaly
+  opportunity
+  risk
+  trend
+  milestone
+}
+
+enum Severity {
+  low
+  medium
+  high
+  critical
+}
+
+enum InsightStatus {
+  new
+  acknowledged
+  planned
+  dismissed
+  superseded
+}
+
+// 3. PLAN — Planner 决策产出
+model Plan {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  insightId String?
+  insight   Insight? @relation(fields: [insightId], references: [id])
+
+  objective String
+  rationale String @db.Text
+
+  priority         Int
+  estimatedKpi     String?
+  estimatedDelta   Float?
+  estimatedHorizon Int?
+
+  riskLevel     Int
+  reversibility Reversibility
+  blastRadius   String?
+
+  status PlanStatus @default(draft)
+
+  steps    PlanStep[]
+  missions Mission[]
+  approval Approval?
+
+  generatedBy String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, priority])
+  @@index([projectId, createdAt])
+}
+
+enum PlanStatus {
+  draft
+  pending
+  approved
+  rejected
+  executing
+  completed
+  failed
+  superseded
+}
+
+enum Reversibility {
+  reversible
+  partially
+  irreversible
+}
+
+// 4. PLAN STEP
+model PlanStep {
+  id     String @id @default(cuid())
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  order          Int
+  action         String
+  agentId        String?
+  workflowId     String?
+  expectedOutput String? @db.Text
+  inputs         Json?
+
+  @@unique([planId, order])
+  @@index([agentId])
+}
+
+// 5. MISSION — 执行实例，绑定 WorkflowRun
+model Mission {
+  id        String  @id @default(cuid())
+  planId    String
+  plan      Plan    @relation(fields: [planId], references: [id])
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  // 指向现有 Workflow / WorkflowRun，存字符串避免修改现有模型
+  workflowId    String
+  workflowRunId String? @unique
+
+  status        MissionStatus @default(queued)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  resultSummary String?       @db.Text
+  errorMessage  String?
+
+  feedback Feedback?
+
+  createdAt DateTime @default(now())
+
+  @@index([status])
+  @@index([projectId, createdAt])
+}
+
+enum MissionStatus {
+  queued
+  executing
+  succeeded
+  failed
+  cancelled
+  awaiting_feedback
+}
+
+// 6. FEEDBACK — Outcome 归因
+model Feedback {
+  id        String  @id @default(cuid())
+  missionId String  @unique
+  mission   Mission @relation(fields: [missionId], references: [id])
+
+  expectedKpi   String
+  expectedDelta Float
+  actualDelta   Float?
+  effectiveness Float?
+
+  postmortem String   @db.Text
+  learnings  String   @db.Text
+  tags       String[]
+
+  evaluatedAt       DateTime
+  observationWindow Int
+
+  createdAt DateTime @default(now())
+
+  @@index([effectiveness])
+}
+
+// 7. MEMORY — 唯一向量库
+model Memory {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  kind           MemoryKind
+  content        String                       @db.Text
+  embedding      Unsupported("vector(1536)")?
+  embeddingModel String?
+
+  sourceTable String
+  sourceId    String
+
+  metadata Json
+
+  retrievedCount Int @default(0)
+  helpfulCount   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sourceTable, sourceId])
+  @@index([kind, projectId])
+}
+
+enum MemoryKind {
+  insight_summary
+  feedback_lesson
+  playbook
+  project_fact
+  postmortem
+}
+
+// 8. APPROVAL — HITL 关卡
+model Approval {
+  id     String @id @default(cuid())
+  planId String @unique
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  riskLevel         Int
+  reversibility     Reversibility
+  blastRadius       String?
+  estimatedCost     Float?
+  requiredApprovers Int           @default(1)
+
+  decision  ApprovalDecision @default(pending)
+  decidedBy String?
+  decidedAt DateTime?
+  notes     String?
+
+  approverContext Json?
+
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([decision, createdAt])
+}
+
+enum ApprovalDecision {
+  pending
+  approved
+  rejected
+  expired
+  escalated
+}
+
+// 9. PLAYBOOK — 可复用模板
+model Playbook {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  name           String
+  description    String @db.Text
+  triggerPattern String @db.Text
+
+  template Json
+
+  invocations Int    @default(0)
+  successes   Int    @default(0)
+  successRate Float?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, isActive])
 }
