@@ -5,6 +5,10 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname === '/api/admin/verify') {
+    return NextResponse.next();
+  }
+
   if (!ADMIN_TOKEN || !CRON_SECRET) {
     return new NextResponse('Server auth not configured', { status: 500 });
   }
