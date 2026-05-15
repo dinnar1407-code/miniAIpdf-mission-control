@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Zap,
   AlertTriangle, Shield, ChevronRight, Loader2,
@@ -103,6 +104,7 @@ function RiskBar({ level }: { level: number }) {
 }
 
 export default function PlanDetailPage() {
+  const t      = useT();
   const params = useParams();
   const id     = params.id as string;
 
@@ -142,7 +144,7 @@ export default function PlanDetailPage() {
   }
 
   async function handleReject() {
-    if (!notes.trim()) { setError("请填写拒绝原因"); return; }
+    if (!notes.trim()) { setError(t.planRejectRequired); return; }
     setError(null);
     setActing("reject");
     const res = await fetch(`/api/autopilot/plans/${id}/reject`, {
@@ -174,7 +176,7 @@ export default function PlanDetailPage() {
       <div className="min-h-screen bg-[#0A0A0F] flex flex-col items-center justify-center gap-3">
         <AlertTriangle className="w-8 h-8 text-[#EF4444]" />
         <p className="text-[#8B8B9E] text-sm">{error}</p>
-        <Link href="/autopilot/plans" className="text-xs text-[#3B82F6] hover:underline">← 返回列表</Link>
+        <Link href="/autopilot/plans" className="text-xs text-[#3B82F6] hover:underline">← {t.planBack}</Link>
       </div>
     );
   }
@@ -188,7 +190,7 @@ export default function PlanDetailPage() {
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title={plan.project ? `${plan.project.emoji} ${plan.project.name}` : "Plan"}
-        subtitle="计划详情"
+        subtitle={t.planSubtitle}
       />
 
       <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4">
@@ -257,10 +259,10 @@ export default function PlanDetailPage() {
         {/* Steps */}
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-[#2A2A3A]">
-            <p className="text-xs font-semibold text-white">执行步骤 ({plan.steps.length})</p>
+            <p className="text-xs font-semibold text-white">{t.planStepsSection(plan.steps.length)}</p>
           </div>
           {plan.steps.length === 0 ? (
-            <p className="text-xs text-[#555566] text-center py-6">无步骤</p>
+            <p className="text-xs text-[#555566] text-center py-6">{t.planNoSteps}</p>
           ) : (
             <div className="divide-y divide-[#1E1E2E]">
               {plan.steps.map((step, idx) => (
@@ -288,7 +290,7 @@ export default function PlanDetailPage() {
         {plan.missions.length > 0 && (
           <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#2A2A3A]">
-              <p className="text-xs font-semibold text-white">执行记录 ({plan.missions.length})</p>
+              <p className="text-xs font-semibold text-white">{t.planMissionsSection(plan.missions.length)}</p>
             </div>
             <div className="divide-y divide-[#1E1E2E]">
               {plan.missions.map((m) => (
@@ -324,19 +326,19 @@ export default function PlanDetailPage() {
           <div className="bg-[#12121A] border border-yellow-500/30 rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-yellow-400" />
-              <p className="text-sm font-semibold text-white">等待审批</p>
+              <p className="text-sm font-semibold text-white">{t.planAwaitingApproval}</p>
             </div>
 
             {plan.planApproval && (
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {plan.planApproval.estimatedCost !== null && (
                   <div className="bg-[#1A1A28] rounded-lg px-3 py-2">
-                    <p className="text-[10px] text-[#555566]">预计成本</p>
+                    <p className="text-[10px] text-[#555566]">{t.planEstCost}</p>
                     <p className="text-white">${plan.planApproval.estimatedCost?.toFixed(2)}</p>
                   </div>
                 )}
                 <div className="bg-[#1A1A28] rounded-lg px-3 py-2">
-                  <p className="text-[10px] text-[#555566]">可逆性</p>
+                  <p className="text-[10px] text-[#555566]">{t.planReversibility}</p>
                   <p className="text-white capitalize">{plan.planApproval.reversibility}</p>
                 </div>
               </div>
@@ -354,7 +356,7 @@ export default function PlanDetailPage() {
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="请填写拒绝原因…"
+                  placeholder={t.planRejectPlaceholder}
                   rows={3}
                   className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-xs text-white placeholder-[#555566] resize-none focus:outline-none focus:border-[#3A3A4A]"
                 />
@@ -363,7 +365,7 @@ export default function PlanDetailPage() {
                     onClick={() => { setShowReject(false); setNotes(""); setError(null); }}
                     className="flex-1 px-3 py-2 rounded-lg bg-[#1A1A28] text-xs text-[#8B8B9E] hover:text-white transition-colors"
                   >
-                    取消
+                    {t.planCancel}
                   </button>
                   <button
                     onClick={handleReject}
@@ -373,7 +375,7 @@ export default function PlanDetailPage() {
                     {acting === "reject"
                       ? <Loader2 className="w-3 h-3 animate-spin" />
                       : <XCircle className="w-3 h-3" />}
-                    确认拒绝
+                    {t.planConfirmReject}
                   </button>
                 </div>
               </div>
@@ -384,7 +386,7 @@ export default function PlanDetailPage() {
                   className="flex-1 px-3 py-2 rounded-lg bg-[#1A1A28] border border-[#2A2A3A] text-xs text-[#8B8B9E] hover:text-white hover:border-[#EF4444] transition-colors flex items-center justify-center gap-1.5"
                 >
                   <XCircle className="w-3.5 h-3.5" />
-                  拒绝
+                  {t.planReject}
                 </button>
                 <button
                   onClick={handleApprove}
@@ -394,7 +396,7 @@ export default function PlanDetailPage() {
                   {acting === "approve"
                     ? <Loader2 className="w-3 h-3 animate-spin" />
                     : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  批准执行
+                  {t.planApprove}
                 </button>
               </div>
             )}
@@ -407,9 +409,9 @@ export default function PlanDetailPage() {
             <div className="flex items-center gap-2 mb-1">
               <Shield className="w-3.5 h-3.5 text-[#8B8B9E]" />
               <p className="text-xs text-[#8B8B9E]">
-                由 {plan.planApproval.decidedBy} 于{" "}
+                {t.planDecisionBy(plan.planApproval.decidedBy)}{" "}
                 {plan.planApproval.decidedAt
-                  ? new Date(plan.planApproval.decidedAt).toLocaleDateString("zh-CN", {
+                  ? new Date(plan.planApproval.decidedAt).toLocaleDateString(undefined, {
                       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
                     })
                   : "—"}{" "}

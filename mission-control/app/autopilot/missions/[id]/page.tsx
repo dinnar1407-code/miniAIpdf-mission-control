@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, Loader2,
   AlertTriangle, ChevronDown, ChevronRight, Bot,
@@ -108,13 +109,13 @@ function calcDuration(start: string | null, end: string | null): string {
   return `${Math.round(ms / 3_600_000)}h`;
 }
 
-function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null, ago: (n: number, unit: string) => string): string {
   if (!iso) return "—";
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000)     return `${Math.round(diff / 1000)}s 前`;
-  if (diff < 3_600_000)  return `${Math.round(diff / 60_000)}m 前`;
-  if (diff < 86_400_000) return `${Math.round(diff / 3_600_000)}h 前`;
-  return new Date(iso).toLocaleDateString("zh-CN", {
+  if (diff < 60_000)     return ago(Math.round(diff / 1000), "s");
+  if (diff < 3_600_000)  return ago(Math.round(diff / 60_000), "m");
+  if (diff < 86_400_000) return ago(Math.round(diff / 3_600_000), "h");
+  return new Date(iso).toLocaleString(undefined, {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
 }
@@ -133,6 +134,7 @@ function StepCard({
   result: StepResult | undefined;
   missionStatus: string;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const status    = result?.status ?? "pending";
   const isRunning = status === "running" && missionStatus === "executing";
@@ -216,7 +218,7 @@ function StepCard({
             {expanded
               ? <ChevronDown  className="w-3 h-3" />
               : <ChevronRight className="w-3 h-3" />}
-            {expanded ? "收起输出" : "查看输出"}
+            {expanded ? t.missionStepCollapseOutput : t.missionStepExpandOutput}
           </button>
           {expanded && (
             <div className="mt-2 bg-[#0A0A0F] rounded-lg p-3 max-h-64 overflow-y-auto">
@@ -239,6 +241,7 @@ function StepCard({
 
 // ── 主页面 ───────────────────────────────────────────────────────
 export default function MissionDetailPage() {
+  const t                    = useT();
   const { id }               = useParams() as { id: string };
   const [rawOpen, setRawOpen] = useState(false);
 
@@ -300,7 +303,7 @@ export default function MissionDetailPage() {
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title="Mission"
-        subtitle={mission.project ? `${mission.project.emoji} ${mission.project.name}` : "执行详情"}
+        subtitle={mission.project ? `${mission.project.emoji} ${mission.project.name}` : t.missionSubtitle}
       />
 
       <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4">
@@ -346,11 +349,11 @@ export default function MissionDetailPage() {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <p className="text-[10px] text-[#555566] mb-0.5">Started</p>
-              <p className="text-xs text-[#8B8B9E]">{relativeTime(mission.startedAt)}</p>
+              <p className="text-xs text-[#8B8B9E]">{mission.startedAt ? t.timeAgo(Date.now() - new Date(mission.startedAt).getTime()) : '—'}</p>
             </div>
             <div>
               <p className="text-[10px] text-[#555566] mb-0.5">Completed</p>
-              <p className="text-xs text-[#8B8B9E]">{relativeTime(mission.completedAt)}</p>
+              <p className="text-xs text-[#8B8B9E]">{mission.completedAt ? t.timeAgo(Date.now() - new Date(mission.completedAt).getTime()) : '—'}</p>
             </div>
             <div>
               <p className="text-[10px] text-[#555566] mb-0.5">Duration</p>
@@ -365,9 +368,9 @@ export default function MissionDetailPage() {
         {totalSteps > 0 && (
           <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#2A2A3A] flex items-center justify-between">
-              <p className="text-xs font-semibold text-white">Steps Execution</p>
+              <p className="text-xs font-semibold text-white">{t.missionStepsExecution}</p>
               <span className="text-[10px] text-[#555566]">
-                {doneCount} / {totalSteps} 完成
+                {t.missionStepsDone(doneCount, totalSteps)}
               </span>
             </div>
             <div className="p-4 space-y-3">
@@ -387,13 +390,13 @@ export default function MissionDetailPage() {
 
         {/* Result Summary */}
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4">
-          <p className="text-xs font-semibold text-white mb-2">Result Summary</p>
+          <p className="text-xs font-semibold text-white mb-2">{t.missionResultSummary}</p>
           {mission.resultSummary ? (
             <p className="text-xs text-[#8B8B9E] leading-relaxed whitespace-pre-wrap">
               {mission.resultSummary}
             </p>
           ) : (
-            <p className="text-xs text-[#555566] italic">Not summarized yet</p>
+            <p className="text-xs text-[#555566] italic">{t.missionNoSummary}</p>
           )}
         </div>
 
@@ -402,7 +405,7 @@ export default function MissionDetailPage() {
           <div className="bg-[#12121A] border border-red-500/40 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              <p className="text-xs font-semibold text-red-400">Error</p>
+              <p className="text-xs font-semibold text-red-400">{t.missionError}</p>
             </div>
             <p className="text-xs text-red-300 leading-relaxed whitespace-pre-wrap font-mono">
               {mission.errorMessage}
@@ -416,7 +419,7 @@ export default function MissionDetailPage() {
             onClick={() => setRawOpen(!rawOpen)}
             className="w-full px-4 py-3 flex items-center justify-between text-xs text-[#8B8B9E] hover:text-white transition-colors"
           >
-            <span className="font-semibold">Raw Data</span>
+            <span className="font-semibold">{t.missionRawData}</span>
             {rawOpen
               ? <ChevronDown  className="w-3.5 h-3.5" />
               : <ChevronRight className="w-3.5 h-3.5" />}

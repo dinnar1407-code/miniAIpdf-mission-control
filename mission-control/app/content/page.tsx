@@ -27,17 +27,12 @@ const CHANNEL_META: Record<string, { icon: string; name: string }> = {
   medium:           { icon: "📖", name: "Medium" },
 };
 
-const STATUS_CONFIG: Record<string, { icon: React.ReactNode; label: string; cls: string }> = {
-  draft:     { icon: <Clock size={11} />,       label: "草稿",   cls: "text-[#8B8B9E] bg-[#2A2A3A]" },
-  approved:  { icon: <CheckCircle size={11} />, label: "已审批", cls: "text-blue-400 bg-blue-400/10" },
-  published: { icon: <CheckCircle size={11} />, label: "已发布", cls: "text-green-400 bg-green-400/10" },
-  failed:    { icon: <XCircle size={11} />,     label: "失败",   cls: "text-red-400 bg-red-400/10" },
-  scheduled: { icon: <Clock size={11} />,       label: "待发布", cls: "text-yellow-400 bg-yellow-400/10" },
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  short_post: "短帖", long_post: "长文", article: "博客",
-  thread: "推文串", video: "视频", image_post: "图文", link_share: "链接",
+const STATUS_CONFIG: Record<string, { icon: React.ReactNode; cls: string }> = {
+  draft:     { icon: <Clock size={11} />,       cls: "text-[#8B8B9E] bg-[#2A2A3A]" },
+  approved:  { icon: <CheckCircle size={11} />, cls: "text-blue-400 bg-blue-400/10" },
+  published: { icon: <CheckCircle size={11} />, cls: "text-green-400 bg-green-400/10" },
+  failed:    { icon: <XCircle size={11} />,     cls: "text-red-400 bg-red-400/10" },
+  scheduled: { icon: <Clock size={11} />,       cls: "text-yellow-400 bg-yellow-400/10" },
 };
 
 const FILTERS = ["all", "draft", "approved", "scheduled", "published", "failed"] as const;

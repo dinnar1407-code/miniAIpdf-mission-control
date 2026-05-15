@@ -67,24 +67,27 @@ const CHANNEL_FIELDS: Record<string, { key: string; label: string; placeholder: 
 };
 
 // ── Integration Config ─────────────────────────────────────────
+type IntegDescKey = "integStripe" | "integGsc" | "integGa" | "integTelegram" | "integTwitter" | "integWordpress";
+
 interface Integration {
   id: string;
   name: string;
   icon: string;
   priority: "P0" | "P1";
-  description: string;
+  descKey: IntegDescKey;
   envVars: string[];
   webhookUrl?: string;
   docsUrl: string;
 }
 
-const INTEGRATIONS: Integration[] = [
+// Integration id → i18n key mapping (populated after useT() is available)
+const INTEGRATION_BASE = [
   {
     id: "stripe",
     name: "Stripe",
     icon: "💳",
-    priority: "P0",
-    description: "实时 MRR、订阅数、付款事件",
+    priority: "P0" as const,
+    descKey: "integStripe" as const,
     envVars: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
     webhookUrl: "/api/webhooks/stripe",
     docsUrl: "https://dashboard.stripe.com/webhooks",
@@ -93,8 +96,8 @@ const INTEGRATIONS: Integration[] = [
     id: "gsc",
     name: "Google Search Console",
     icon: "🔍",
-    priority: "P0",
-    description: "关键词排名、点击量、收录状态",
+    priority: "P0" as const,
+    descKey: "integGsc" as const,
     envVars: ["GOOGLE_SERVICE_ACCOUNT_KEY", "GSC_SITE_URL"],
     docsUrl: "https://search.google.com/search-console",
   },
@@ -102,8 +105,8 @@ const INTEGRATIONS: Integration[] = [
     id: "ga",
     name: "Google Analytics 4",
     icon: "📊",
-    priority: "P0",
-    description: "流量来源、用户数、转化路径",
+    priority: "P0" as const,
+    descKey: "integGa" as const,
     envVars: ["GOOGLE_SERVICE_ACCOUNT_KEY", "GA_PROPERTY_ID"],
     docsUrl: "https://analytics.google.com",
   },
@@ -111,8 +114,8 @@ const INTEGRATIONS: Integration[] = [
     id: "telegram",
     name: "Telegram Bot",
     icon: "✈️",
-    priority: "P0",
-    description: "双向通知、审批指令",
+    priority: "P0" as const,
+    descKey: "integTelegram" as const,
     envVars: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_WEBHOOK_SECRET"],
     webhookUrl: "/api/webhooks/telegram",
     docsUrl: "https://t.me/BotFather",
@@ -121,8 +124,8 @@ const INTEGRATIONS: Integration[] = [
     id: "twitter",
     name: "Twitter / X",
     icon: "𝕏",
-    priority: "P1",
-    description: "自动发推文、数据回读",
+    priority: "P1" as const,
+    descKey: "integTwitter" as const,
     envVars: ["TWITTER_API_KEY", "TWITTER_API_SECRET", "TWITTER_ACCESS_TOKEN", "TWITTER_ACCESS_SECRET"],
     docsUrl: "https://developer.twitter.com",
   },
@@ -130,8 +133,8 @@ const INTEGRATIONS: Integration[] = [
     id: "wordpress",
     name: "WordPress",
     icon: "📰",
-    priority: "P1",
-    description: "博客文章自动发布",
+    priority: "P1" as const,
+    descKey: "integWordpress" as const,
     envVars: ["WORDPRESS_SITE_URL", "WORDPRESS_USERNAME", "WORDPRESS_APP_PASSWORD"],
     docsUrl: "https://wordpress.org/documentation/article/application-passwords",
   },
@@ -304,7 +307,7 @@ function IntegrationCard({ integration }: { integration: Integration }) {
               {integration.priority}
             </span>
           </div>
-          <p className="text-xs text-[#8B8B9E] mt-0.5">{integration.description}</p>
+          <p className="text-xs text-[#8B8B9E] mt-0.5">{t[integration.descKey] as string}</p>
         </div>
       </div>
 
@@ -581,7 +584,7 @@ export default function SettingsPage() {
               <p className="text-xs text-[#8B8B9E] mt-1">{t.settingsIntegrationsDesc}</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {INTEGRATIONS.map(integration => (
+              {INTEGRATION_BASE.map(integration => (
                 <IntegrationCard key={integration.id} integration={integration} />
               ))}
             </div>
@@ -601,11 +604,11 @@ export default function SettingsPage() {
 
             <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl divide-y divide-[#2A2A3A]">
               {[
-                { label: "AI Provider",       value: "Anthropic Claude",           sub: "claude-haiku-4-5-20251001 (快速任务) · claude-sonnet-4-6 (内容创作)" },
-                { label: "ANTHROPIC_API_KEY", value: "在 Vercel 环境变量中配置",    sub: "Settings → Environment Variables → ANTHROPIC_API_KEY" },
-                { label: "默认模型",           value: "claude-haiku-4-5-20251001",  sub: "低延迟，适合大多数 Agent 任务" },
-                { label: "降级策略",           value: "自动降级到模拟模式",           sub: "API Key 未配置时，Agent 返回预设示例输出" },
-                { label: "Agents",             value: "Playfish · PM01 · DFM · Admin01 · PM01-B", sub: "各 Agent 拥有专属系统 Prompt 和能力范围" },
+                { label: "AI Provider",              value: "Anthropic Claude",                        sub: t.settingsAIRow1Sub },
+                { label: "ANTHROPIC_API_KEY",        value: t.settingsAIApiKeyConfig,                  sub: "Settings → Environment Variables → ANTHROPIC_API_KEY" },
+                { label: t.settingsAIDefaultModel,   value: "claude-haiku-4-5-20251001",               sub: t.settingsAIDefaultModelSub },
+                { label: t.settingsAIFallback,       value: t.settingsAIFallbackValue,                 sub: t.settingsAIFallbackSub },
+                { label: "Agents",                   value: "Playfish · PM01 · DFM · Admin01 · PM01-B", sub: t.settingsAIAgentsSub },
               ].map(item => (
                 <div key={item.label} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-4">
@@ -622,11 +625,11 @@ export default function SettingsPage() {
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
               <p className="text-xs text-blue-400 font-medium mb-1">{t.settingsAnthropicHow}</p>
               <ol className="text-xs text-[#8B8B9E] space-y-1 list-decimal list-inside">
-                <li>访问 <span className="text-white font-mono">console.anthropic.com</span> → API Keys</li>
-                <li>创建新 Key，复制</li>
-                <li>打开 Vercel → 你的项目 → Settings → Environment Variables</li>
-                <li>添加 <span className="text-white font-mono">ANTHROPIC_API_KEY</span>，粘贴值，选择所有环境</li>
-                <li>重新部署（Deployments → Redeploy）</li>
+                <li>{t.settingsAIStep1}</li>
+                <li>{t.settingsAIStep2}</li>
+                <li>{t.settingsAIStep3}</li>
+                <li>{t.settingsAIStep4}</li>
+                <li>{t.settingsAIStep5}</li>
               </ol>
             </div>
           </div>

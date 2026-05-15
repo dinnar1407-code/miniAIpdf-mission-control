@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import {
   AlertTriangle, TrendingUp, Zap, Trophy,
   Lightbulb, ArrowLeft, ChevronRight, TrendingDown, Loader2,
@@ -81,17 +82,18 @@ function fmtNum(val: number | undefined | null): string {
 
 // ── Evidence 区域 ────────────────────────────────────────────────
 function EvidenceSection({ evidence }: { evidence: Evidence }) {
+  const t = useT();
   const isDown = (evidence.delta7d ?? 0) < 0;
 
   const stats: { label: string; value: string; mono?: boolean }[] = [
-    { label: "当前值",   value: fmtNum(evidence.current),   mono: true },
-    { label: "基线",     value: fmtNum(evidence.baseline),  mono: true },
-    { label: "7d 变化",  value: fmtNum(evidence.delta7d),   mono: true },
-    { label: "变化幅度", value: fmtPct(evidence.deltaPct7d), mono: true },
-    { label: "指标",     value: evidence.metric ?? "—"                  },
-    { label: "数据源",   value: evidence.source ?? "—"                  },
-    { label: "窗口",     value: evidence.window ?? "—"                  },
-    { label: "单位",     value: evidence.unit   ?? "—"                  },
+    { label: t.insightEvidenceCurrent,  value: fmtNum(evidence.current),    mono: true },
+    { label: t.insightEvidenceBaseline, value: fmtNum(evidence.baseline),   mono: true },
+    { label: t.insightEvidence7d,       value: fmtNum(evidence.delta7d),    mono: true },
+    { label: t.insightEvidenceDelta,    value: fmtPct(evidence.deltaPct7d), mono: true },
+    { label: t.insightEvidenceMetric,   value: evidence.metric ?? "—"                  },
+    { label: t.insightEvidenceSource,   value: evidence.source ?? "—"                  },
+    { label: t.insightEvidenceWindow,   value: evidence.window ?? "—"                  },
+    { label: t.insightEvidenceUnit,     value: evidence.unit   ?? "—"                  },
   ];
 
   return (
@@ -115,7 +117,7 @@ function EvidenceSection({ evidence }: { evidence: Evidence }) {
       </div>
       <details className="mt-1">
         <summary className="text-[11px] text-[#555566] cursor-pointer hover:text-[#8B8B9E] select-none">
-          原始数据
+          {t.insightRawData}
         </summary>
         <pre className="mt-2 text-[10px] text-[#6B6B8E] bg-[#0A0A0F] rounded-lg p-3 overflow-x-auto leading-relaxed">
           {JSON.stringify(evidence, null, 2)}
@@ -141,6 +143,7 @@ function InlineToast({ msg, type, onDone }: { msg: string; type: "success" | "er
 
 // ── Plan 卡 ────────────────────────────────────────────────────
 function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerated: () => void }) {
+  const t = useT();
   const router = useRouter();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
@@ -170,15 +173,15 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
   if (insight.status === "new") {
     body = (
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[#555566]">No plan generated yet</p>
+        <p className="text-xs text-[#555566]">{t.insightPlanNone}</p>
         <button
           onClick={() => mutate()}
           disabled={isPending}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#6366F1] text-white font-medium hover:bg-[#5254CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isPending
-            ? <><Loader2 className="w-3 h-3 animate-spin" />Generating plan...</>
-            : "Generate Plan Now"
+            ? <><Loader2 className="w-3 h-3 animate-spin" />{t.insightPlanGenerating}</>
+            : t.insightPlanGenerate
           }
         </button>
       </div>
@@ -207,7 +210,7 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
       </div>
     );
   } else if (insight.status === "dismissed") {
-    body = <p className="text-xs text-[#555566]">Insight dismissed, no plan will be generated</p>;
+    body = <p className="text-xs text-[#555566]">{t.insightPlanDismissed}</p>;
   } else {
     body = <p className="text-xs text-[#555566] capitalize">{insight.status}</p>;
   }
@@ -216,7 +219,7 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
     <>
       {toast && <InlineToast msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
       <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-white">Generated Plan</h3>
+        <h3 className="text-sm font-semibold text-white">{t.insightPlanGenerated}</h3>
         {body}
       </div>
     </>
@@ -225,6 +228,7 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
 
 // ── 主页 ────────────────────────────────────────────────────────
 export default function InsightDetailPage() {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -247,7 +251,7 @@ export default function InsightDetailPage() {
         subtitle={
           insight
             ? `${insight.project?.emoji ?? ""} ${insight.project?.name ?? "—"} · ${new Date(insight.observedAt).toLocaleDateString("zh-CN", { month: "long", day: "numeric" })}`
-            : "加载中…"
+            : t.insightLoading
         }
       />
 
@@ -257,7 +261,7 @@ export default function InsightDetailPage() {
           className="inline-flex items-center gap-1 text-xs text-[#555566] hover:text-[#8B8B9E] transition-colors"
         >
           <ArrowLeft className="w-3 h-3" />
-          返回 Insights
+          {t.insightBack}
         </Link>
 
         {isLoading && (
@@ -271,13 +275,13 @@ export default function InsightDetailPage() {
         {isError && (
           <div className="flex flex-col items-center justify-center py-20 text-[#555566]">
             <AlertTriangle className="w-8 h-8 mb-3 text-[#EF4444]" />
-            <p className="text-sm">Insight 不存在或已删除</p>
+            <p className="text-sm">{t.insightNotFound}</p>
           </div>
         )}
 
         {insight && (
           <>
-            {/* 标题卡 */}
+            {/* Title card */}
             <div className={`bg-[#12121A] border ${severityBorder} rounded-xl p-4 space-y-3`}>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#1E1E2E] text-[#8B8B9E] capitalize">
@@ -302,13 +306,13 @@ export default function InsightDetailPage() {
               </p>
             </div>
 
-            {/* 建议行动 */}
+            {/* Suggested action */}
             {insight.suggestedAction && (
               <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 flex items-start gap-3">
                 <Lightbulb className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold text-[#8B8B9E] mb-1 uppercase tracking-wide">
-                    建议行动
+                    {t.insightSuggestedAction}
                   </p>
                   <p className="text-sm text-white leading-relaxed">{insight.suggestedAction}</p>
                 </div>
@@ -321,11 +325,11 @@ export default function InsightDetailPage() {
             {/* Generated Plan */}
             <PlanCard insight={insight} onGenerated={() => refetch()} />
 
-            {/* 元信息 */}
+            {/* Meta */}
             <div className="text-[11px] text-[#555566] space-y-1 pt-1 pb-4">
               <p>ID：<span className="font-mono">{insight.id}</span></p>
-              <p>观测时间：{new Date(insight.observedAt).toLocaleString("zh-CN")}</p>
-              <p>创建时间：{new Date(insight.createdAt).toLocaleString("zh-CN")}</p>
+              <p>{t.insightObservedAt}{new Date(insight.observedAt).toLocaleString()}</p>
+              <p>{t.insightCreatedAt}{new Date(insight.createdAt).toLocaleString()}</p>
             </div>
           </>
         )}
