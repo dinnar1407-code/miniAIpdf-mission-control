@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { Rocket, CheckCircle2, XCircle, Clock, Loader2, AlertTriangle } from "lucide-react";
 
 // ── 类型 ────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ function MissionCard({ mission }: { mission: MissionRow }) {
 }
 
 export default function MissionsPage() {
+  const t = useT();
   const [missions, setMissions] = useState<MissionRow[]>([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);
@@ -172,7 +174,7 @@ export default function MissionsPage() {
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title="Missions"
-        subtitle={`执行记录 · ${total} 条${runningCount > 0 ? ` · ${runningCount} 运行中` : ""}`}
+        subtitle={t.missionsSubtitle(total, runningCount)}
       />
 
       <div className="p-4 md:p-6 space-y-4">
@@ -187,8 +189,8 @@ export default function MissionsPage() {
         ) : missions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#555566]">
             <Rocket className="w-8 h-8 mb-3" />
-            <p className="text-sm">暂无 Missions</p>
-            <p className="text-xs mt-1">批准 Plan 后自动触发执行</p>
+            <p className="text-sm">{t.missionsNone}</p>
+            <p className="text-xs mt-1">{t.missionsNoneHint}</p>
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

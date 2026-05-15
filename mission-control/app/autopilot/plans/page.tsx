@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { ClipboardList, ChevronRight, Zap, AlertTriangle } from "lucide-react";
 
 // ── 类型 ────────────────────────────────────────────────────────
@@ -146,6 +147,7 @@ function PlanCard({ plan }: { plan: PlanRow }) {
 }
 
 export default function PlansPage() {
+  const t = useT();
   const [plans, setPlans]     = useState<PlanRow[]>([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
@@ -170,7 +172,7 @@ export default function PlansPage() {
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title="Plans"
-        subtitle={`自动驾驶计划 · ${total} 条${pendingCount > 0 ? ` · ${pendingCount} 待审批` : ""}`}
+        subtitle={t.plansSubtitle(total, pendingCount)}
       />
 
       <div className="p-4 md:p-6 space-y-4">
@@ -185,8 +187,8 @@ export default function PlansPage() {
         ) : plans.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#555566]">
             <ClipboardList className="w-8 h-8 mb-3" />
-            <p className="text-sm">暂无 Plans</p>
-            <p className="text-xs mt-1">Insight 触发后自动生成</p>
+            <p className="text-sm">{t.plansNone}</p>
+            <p className="text-xs mt-1">{t.plansNoneHint}</p>
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -200,7 +202,7 @@ export default function PlansPage() {
           <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3">
             <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
             <p className="text-xs text-yellow-300">
-              {pendingCount} 个计划等待审批后才能执行
+              {t.plansPendingBanner(pendingCount)}
             </p>
           </div>
         )}

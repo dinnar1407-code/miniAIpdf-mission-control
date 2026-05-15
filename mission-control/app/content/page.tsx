@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { useEffect, useState, useCallback } from "react";
 import {
   RefreshCw, Loader2, CheckCircle, Clock, XCircle,
@@ -43,6 +44,18 @@ const FILTERS = ["all", "draft", "approved", "scheduled", "published", "failed"]
 type FilterType = typeof FILTERS[number];
 
 export default function ContentPage() {
+  const t = useT();
+
+  const statusLabel = (s: string) => ({
+    draft: t.statusDraft, approved: t.statusApproved,
+    published: t.statusPublished, failed: t.statusFailed, scheduled: t.statusScheduled,
+  }[s] ?? s);
+
+  const typeLabel = (tp: string) => ({
+    short_post: t.typeShortPost, long_post: t.typeLongPost, article: t.typeArticle,
+    thread: t.typeThread, video: t.typeVideo, image_post: t.typeImagePost, link_share: t.typeLinkShare,
+  }[tp] ?? tp);
+
   const [items,    setItems]    = useState<ContentItem[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [filter,   setFilter]   = useState<FilterType>("all");
@@ -101,16 +114,16 @@ export default function ContentPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Content Calendar" subtitle="全媒体矩阵 · 发布管理" />
+      <Header title="Content Calendar" subtitle={t.contentSubtitle} />
       <div className="p-4 md:p-6 space-y-4">
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {[
-            { label: "总内容",  count: stats.total,     color: "#8B5CF6" },
-            { label: "已发布",  count: stats.published, color: "#10B981" },
-            { label: "待发布",  count: stats.scheduled, color: "#F59E0B" },
-            { label: "草稿",    count: stats.draft,     color: "#8B8B9E" },
+            { label: t.contentTotal,     count: stats.total,     color: "#8B5CF6" },
+            { label: t.contentPublished, count: stats.published, color: "#10B981" },
+            { label: t.contentScheduled, count: stats.scheduled, color: "#F59E0B" },
+            { label: t.contentDraft,     count: stats.draft,     color: "#8B8B9E" },
           ].map(s => (
             <div key={s.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-3 text-center">
               <div className="text-xl font-bold" style={{ color: s.color }}>{s.count}</div>
@@ -127,7 +140,7 @@ export default function ContentPage() {
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0",
                 filter === tab ? "bg-[#3B82F6] text-white" : "text-[#8B8B9E] hover:text-white"
               )}>
-              {tab === "all" ? "全部" : (STATUS_CONFIG[tab]?.label ?? tab)}
+              {tab === "all" ? t.all : statusLabel(tab)}
             </button>
           ))}
           <button onClick={() => load(filter)}
@@ -139,15 +152,13 @@ export default function ContentPage() {
         {/* List */}
         {loading ? (
           <div className="flex items-center justify-center py-20 text-[#5A5A6E]">
-            <Loader2 size={18} className="animate-spin mr-2" /> 加载中…
+            <Loader2 size={18} className="animate-spin mr-2" /> {t.loading}
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-[#2A2A3A] rounded-xl">
             <Send size={24} className="mx-auto mb-3 text-[#3A3A4E]" />
-            <p className="text-[#8B8B9E] text-sm mb-1">暂无内容</p>
-            <p className="text-[#5A5A6E] text-xs">
-              运行带有 📡 Publish 步骤的 Workflow 后，内容会自动出现在这里
-            </p>
+            <p className="text-[#8B8B9E] text-sm mb-1">{t.contentNoItems}</p>
+            <p className="text-[#5A5A6E] text-xs">{t.contentNoItemsHint}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -168,9 +179,9 @@ export default function ContentPage() {
                         onClick={() => setExpanded(isExp ? null : item.id)}
                       >
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-sm font-medium text-white truncate">{item.title || "无标题"}</span>
+                          <span className="text-sm font-medium text-white truncate">{item.title || t.contentNoTitle}</span>
                           <span className="text-xs text-[#5A5A6E] bg-[#1A1A24] px-1.5 py-0.5 rounded flex-shrink-0">
-                            {TYPE_LABELS[item.contentType] ?? item.contentType}
+                            {typeLabel(item.contentType)}
                           </span>
                         </div>
                         <p className="text-xs text-[#8B8B9E] line-clamp-2 mb-2">{item.body}</p>
@@ -196,7 +207,7 @@ export default function ContentPage() {
                             "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium",
                             statusCfg.cls
                           )}>
-                            {statusCfg.icon} {statusCfg.label}
+                            {statusCfg.icon} {statusLabel(item.status)}
                           </span>
                           <button
                             onClick={() => setExpanded(isExp ? null : item.id)}
@@ -218,7 +229,7 @@ export default function ContentPage() {
                                 ? <Loader2 size={10} className="animate-spin" />
                                 : <ThumbsUp size={10} />
                               }
-                              审核通过
+                              {t.contentApprove}
                             </button>
                           )}
 
@@ -232,7 +243,7 @@ export default function ContentPage() {
                                 ? <Loader2 size={10} className="animate-spin" />
                                 : <Rocket size={10} />
                               }
-                              立即发布
+                              {t.contentPublishNow}
                             </button>
                           )}
                         </div>
@@ -251,7 +262,7 @@ export default function ContentPage() {
                       {/* Publish results */}
                       {Object.keys(results).length > 0 && (
                         <div className="space-y-1.5">
-                          <p className="text-xs text-[#8B8B9E] font-medium">发布结果</p>
+                          <p className="text-xs text-[#8B8B9E] font-medium">{t.contentResults}</p>
                           {Object.entries(results).map(([chId, r]) => {
                             const m = CHANNEL_META[chId];
                             return (
@@ -286,15 +297,15 @@ export default function ContentPage() {
 
                       {/* Timestamps */}
                       <div className="flex gap-4 text-xs text-[#5A5A6E] flex-wrap">
-                        <span>创建：{new Date(item.createdAt).toLocaleString("zh-CN")}</span>
+                        <span>{t.contentCreatedAt}{new Date(item.createdAt).toLocaleString()}</span>
                         {item.scheduledFor && (
-                          <span>计划：{new Date(item.scheduledFor).toLocaleString("zh-CN")}</span>
+                          <span>{t.contentScheduledAt}{new Date(item.scheduledFor).toLocaleString()}</span>
                         )}
                         {item.publishedAt && (
-                          <span>发布：{new Date(item.publishedAt).toLocaleString("zh-CN")}</span>
+                          <span>{t.contentPublishedAt}{new Date(item.publishedAt).toLocaleString()}</span>
                         )}
                         {item.workflowRunId && (
-                          <span>来源：Workflow Run</span>
+                          <span>{t.contentSource}</span>
                         )}
                       </div>
                     </div>

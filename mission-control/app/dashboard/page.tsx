@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
 import { AgentStatusMini } from "@/components/dashboard/agent-status-mini";
@@ -71,6 +72,7 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
 };
 
 export default function DashboardPage() {
+  const t = useT();
   const [stats, setStats] = useState<DashboardStats>({
     openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5,
     newAlerts: 0, mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8, agentHours: 142,
@@ -199,22 +201,22 @@ export default function DashboardPage() {
             subtitle={`${stats.totalAgents - stats.activeAgents} idle`}
           />
           <StatCard
-            label="本周 Workflows"
+            label={t.dashWeeklyWorkflows}
             value={`${stats.completedRunsThisWeek ?? 0}/${stats.workflowRunsThisWeek ?? 0}`}
             change={stats.workflowRunsThisWeek ? `${Math.round(((stats.completedRunsThisWeek ?? 0) / stats.workflowRunsThisWeek) * 100)}%` : "0%"}
             changeType="up"
             icon="⚡"
             color="#F97316"
-            subtitle="完成 / 触发"
+            subtitle={t.dashDoneTriggered}
           />
           <StatCard
-            label="内容已发布"
+            label={t.dashContentPublished}
             value={String(stats.contentPublished ?? 0)}
-            change="全渠道"
+            change={t.dashAllChannels}
             changeType="up"
             icon="📡"
             color="#EC4899"
-            subtitle={`草稿 ${stats.contentDraft ?? 0} 篇`}
+            subtitle={t.dashDraftCount(stats.contentDraft ?? 0)}
           />
         </div>
 
@@ -222,9 +224,9 @@ export default function DashboardPage() {
         {(stats.pendingApprovals ?? 0) > 0 && (
           <div className="max-w-md">
             <StatCard
-              label="待审批"
+              label={t.dashPendingApprovals}
               value={String(stats.pendingApprovals)}
-              change="需要处理"
+              change={t.dashActionRequired}
               changeType="neutral"
               icon="⏳"
               color="#F59E0B"
@@ -247,8 +249,8 @@ export default function DashboardPage() {
         {recentRuns.length > 0 && (
           <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-white">最近 Workflow 运行</h3>
-              <a href="/workflows" className="text-xs text-[#3B82F6] hover:underline">查看全部 →</a>
+              <h3 className="text-sm font-semibold text-white">{t.dashRecentRuns}</h3>
+              <a href="/workflows" className="text-xs text-[#3B82F6] hover:underline">{t.dashViewAll}</a>
             </div>
             <div className="space-y-2">
               {recentRuns.map(run => (

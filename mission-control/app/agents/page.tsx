@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { useState, useEffect, useCallback } from "react";
 import { Play, Pause, RefreshCw, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,15 +24,6 @@ function getDisplayType(name: string, dbType: string) {
   return AGENT_META[key]?.displayType ?? dbType;
 }
 
-function timeAgo(date: string | Date) {
-  const diff = Date.now() - new Date(date).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1)  return "刚刚";
-  if (m < 60) return `${m}分钟前`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}小时前`;
-  return `${Math.floor(h / 24)}天前`;
-}
 
 interface AgentData {
   id:              string;
@@ -54,6 +46,9 @@ interface GlobalStats {
 }
 
 export default function AgentsPage() {
+  const t = useT();
+  const timeAgo = (date: string | Date) => t.timeAgo(Date.now() - new Date(date).getTime());
+
   const [agents,       setAgents]       = useState<AgentData[]>([]);
   const [globalStats,  setGlobalStats]  = useState<GlobalStats | null>(null);
   const [selected,     setSelected]     = useState<AgentData | null>(null);
@@ -103,16 +98,15 @@ export default function AgentsPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Agents" subtitle="AI 智能体管理" />
+      <Header title="Agents" subtitle={t.agentsSubtitle} />
 
       <div className="p-4 md:p-6 space-y-6">
-        {/* 全局统计 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "活跃 Agent",    value: loading ? "—" : `${activeCount}/${agents.length}`, icon: "🟢" },
-            { label: "累计完成任务",  value: loading ? "—" : totalTasks,                        icon: "✅" },
-            { label: "内容已发布",    value: loading ? "—" : (globalStats?.publishedContent ?? totalContent), icon: "📄" },
-            { label: "本周 Workflow", value: loading ? "—" : (globalStats?.completedRunsThisWeek ?? 0),       icon: "⚡" },
+            { label: t.agentsActive,          value: loading ? "—" : `${activeCount}/${agents.length}`, icon: "🟢" },
+            { label: t.agentsTasksCompleted,  value: loading ? "—" : totalTasks,                        icon: "✅" },
+            { label: t.agentsContentCount,    value: loading ? "—" : (globalStats?.publishedContent ?? totalContent), icon: "📄" },
+            { label: t.agentsWeeklyWorkflows, value: loading ? "—" : (globalStats?.completedRunsThisWeek ?? 0),       icon: "⚡" },
           ].map(stat => (
             <div key={stat.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-3 md:p-4">
               <div className="text-xl md:text-2xl mb-1">{stat.icon}</div>
@@ -128,13 +122,13 @@ export default function AgentsPage() {
             {loading ? (
               <div className="text-center py-16 text-[#5A5A6E]">
                 <RefreshCw size={24} className="mx-auto mb-2 animate-spin" />
-                <p className="text-sm">加载中...</p>
+                <p className="text-sm">{t.loading}</p>
               </div>
             ) : agents.length === 0 ? (
               <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-8 text-center">
                 <div className="text-3xl mb-2">🤖</div>
-                <div className="text-sm text-[#8B8B9E] mb-1">还没有 Agent 数据</div>
-                <div className="text-xs text-[#5A5A6E]">运行一次 Workflow 后，Agent 记录会自动创建</div>
+                <div className="text-sm text-[#8B8B9E] mb-1">{t.agentsNoData}</div>
+                <div className="text-xs text-[#5A5A6E]">{t.agentsNoDataHint}</div>
               </div>
             ) : (
               agents.map(agent => {
@@ -185,7 +179,7 @@ export default function AgentsPage() {
                             onClick={(e) => { e.stopPropagation(); toggleStatus(agent); }}
                             disabled={isToggling}
                             className="p-1.5 rounded-md bg-[#1A1A24] hover:bg-[#2A2A3A] text-[#8B8B9E] hover:text-white transition-colors flex-shrink-0 disabled:opacity-50"
-                            title={agent.status === "active" ? "暂停" : "激活"}
+                            title={agent.status === "active" ? t.agentsPause : t.agentsActivate}
                           >
                             {isToggling
                               ? <RefreshCw size={13} className="animate-spin" />
@@ -202,14 +196,14 @@ export default function AgentsPage() {
                           </div>
                         ) : (
                           <div className="mt-2 text-xs text-[#5A5A6E] bg-[#1A1A24] rounded-md px-3 py-2">
-                            空闲 — 等待任务
+                            {t.agentsIdle}
                           </div>
                         )}
 
                         {/* 统计行 */}
                         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5A5A6E]">
-                          <span>✅ {agent.tasksCompleted} 任务</span>
-                          <span>📄 {agent.contentPublished} 内容</span>
+                          <span>{t.agentsTasksStat(agent.tasksCompleted)}</span>
+                          <span>{t.agentsContentStat(agent.contentPublished)}</span>
                           <span className="ml-auto">{timeAgo(agent.lastActiveAt)}</span>
                         </div>
 
@@ -246,8 +240,8 @@ export default function AgentsPage() {
                 {/* 统计卡片 */}
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   {[
-                    { label: "完成任务", value: selected.tasksCompleted },
-                    { label: "已发内容", value: selected.contentPublished },
+                    { label: t.agentsTasksDone, value: selected.tasksCompleted },
+                    { label: t.agentsPublished, value: selected.contentPublished },
                   ].map(s => (
                     <div key={s.label} className="bg-[#0A0A0F] rounded-lg p-2 text-center">
                       <div className="text-lg font-bold text-white">{s.value}</div>
@@ -259,7 +253,7 @@ export default function AgentsPage() {
                 {/* 近期活动 */}
                 <div>
                   <div className="text-xs text-[#5A5A6E] mb-2 font-medium uppercase tracking-wider">
-                    近期活动
+                    {t.agentsRecentActivity}
                   </div>
                   {selected.recentActivity.length > 0 ? (
                     <div className="space-y-2">
@@ -276,7 +270,7 @@ export default function AgentsPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-xs text-[#5A5A6E] italic">暂无活动记录</div>
+                    <div className="text-xs text-[#5A5A6E] italic">{t.agentsNoActivity}</div>
                   )}
                 </div>
               </div>
@@ -284,7 +278,7 @@ export default function AgentsPage() {
               <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-8 flex items-center justify-center text-center">
                 <div>
                   <div className="text-3xl mb-2">🤖</div>
-                  <div className="text-sm text-[#8B8B9E]">点击 Agent 卡片查看详情</div>
+                  <div className="text-sm text-[#8B8B9E]">{t.agentsClickToView}</div>
                 </div>
               </div>
             )}
@@ -293,7 +287,7 @@ export default function AgentsPage() {
             {globalStats && globalStats.recentRuns.length > 0 && (
               <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
                 <div className="text-xs text-[#5A5A6E] mb-3 font-medium uppercase tracking-wider">
-                  最近 Workflow 运行
+                  {t.agentsRecentRuns}
                 </div>
                 <div className="space-y-2">
                   {globalStats.recentRuns.map(run => (

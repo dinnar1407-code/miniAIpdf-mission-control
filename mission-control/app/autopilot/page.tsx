@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import {
   AlertTriangle, TrendingUp, Zap, Trophy, Loader2,
   CheckCircle2, XCircle, Clock, Radio, MessageSquare, Rocket,
@@ -66,6 +67,7 @@ function ColumnHeader({
   count?: number;
   href: string;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
@@ -78,7 +80,7 @@ function ColumnHeader({
         )}
       </div>
       <Link href={href} className="text-xs text-[#555566] hover:text-[#8B8B9E] transition-colors">
-        全部 →
+        {t.viewAll}
       </Link>
     </div>
   );
@@ -133,6 +135,7 @@ function MissionStatusIcon({ status }: { status: string }) {
 }
 
 function ActiveMissionCard({ mission }: { mission: MissionRow }) {
+  const t = useT();
   const isExecuting = mission.status === "executing";
   return (
     <Link
@@ -150,7 +153,7 @@ function ActiveMissionCard({ mission }: { mission: MissionRow }) {
             ? "text-[#8B5CF6] bg-[#8B5CF6]/10"
             : "text-[#EAB308] bg-[#EAB308]/10"
           }`}>
-          {isExecuting ? "执行中" : "排队中"}
+          {isExecuting ? t.autopilotExecuting : t.autopilotQueued}
         </span>
         {mission.project && (
           <span className="text-[10px] text-[#555566] ml-auto flex-shrink-0">
@@ -170,6 +173,7 @@ function ActiveMissionCard({ mission }: { mission: MissionRow }) {
 
 // ── 三栏列组件 ───────────────────────────────────────────────────
 function InsightsColumn() {
+  const t = useT();
   const { data, isLoading } = useQuery({
     queryKey: ["overview-insights"],
     queryFn: async () => {
@@ -188,7 +192,7 @@ function InsightsColumn() {
     <div className="flex flex-col">
       <ColumnHeader
         icon={<Radio className="w-4 h-4" />}
-        title="洞察流"
+        title={t.autopilotInsights}
         count={data?.total}
         href="/autopilot/insights"
       />
@@ -201,7 +205,7 @@ function InsightsColumn() {
       ) : sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-[#555566]">
           <Radio className="w-6 h-6 mb-2" />
-          <p className="text-xs">暂无 Insights</p>
+          <p className="text-xs">{t.autopilotNoInsights}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -215,6 +219,7 @@ function InsightsColumn() {
 }
 
 function ActiveMissionsColumn() {
+  const t = useT();
   const { data, isLoading } = useQuery({
     queryKey: ["overview-missions-active"],
     queryFn: async () => {
@@ -232,7 +237,7 @@ function ActiveMissionsColumn() {
     <div className="flex flex-col">
       <ColumnHeader
         icon={<Rocket className="w-4 h-4" />}
-        title="当前任务"
+        title={t.autopilotActiveMissions}
         count={active.length}
         href="/autopilot/missions"
       />
@@ -245,9 +250,9 @@ function ActiveMissionsColumn() {
       ) : active.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-[#555566]">
           <Rocket className="w-6 h-6 mb-2" />
-          <p className="text-xs">无进行中任务</p>
+          <p className="text-xs">{t.autopilotNoActiveMissions}</p>
           <Link href="/autopilot/missions" className="mt-2 text-[10px] text-[#3A3A4A] hover:text-[#555566]">
-            查看历史 →
+            {t.viewHistory}
           </Link>
         </div>
       ) : (
@@ -262,11 +267,12 @@ function ActiveMissionsColumn() {
 }
 
 function FeedbackColumn() {
+  const t = useT();
   return (
     <div className="flex flex-col">
       <ColumnHeader
         icon={<MessageSquare className="w-4 h-4" />}
-        title="反馈库"
+        title={t.autopilotFeedback}
         count={0}
         href="/autopilot/plans"
       />
@@ -282,11 +288,12 @@ function FeedbackColumn() {
 
 // ── 主页 ────────────────────────────────────────────────────────
 export default function AutopilotOverviewPage() {
+  const t = useT();
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
         title="Autopilot"
-        subtitle="自动驾驶总览"
+        subtitle={t.autopilotSubtitle}
       />
 
       {/* 快捷入口 */}

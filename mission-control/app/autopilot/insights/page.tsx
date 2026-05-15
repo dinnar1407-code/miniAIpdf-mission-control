@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { AlertTriangle, TrendingUp, Zap, Target, Flag, Lightbulb } from "lucide-react";
 
 // ── 类型 ────────────────────────────────────────────────────────
@@ -130,6 +131,7 @@ function InsightCard({ insight }: { insight: InsightRow }) {
 }
 
 export default function InsightsPage() {
+  const t = useT();
   const [insights, setInsights] = useState<InsightRow[]>([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);
@@ -155,7 +157,7 @@ export default function InsightsPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Insights" subtitle={`自动观测 · ${total} 条`} />
+      <Header title="Insights" subtitle={t.insightsSubtitle(total)} />
 
       <div className="p-4 md:p-6 space-y-4">
         <div className="space-y-2">
@@ -173,8 +175,8 @@ export default function InsightsPage() {
         ) : insights.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#555566]">
             <AlertTriangle className="w-8 h-8 mb-3" />
-            <p className="text-sm">暂无 Insights</p>
-            <p className="text-xs mt-1">Observer 扫描后自动生成</p>
+            <p className="text-sm">{t.insightsNone}</p>
+            <p className="text-xs mt-1">{t.insightsNoneHint}</p>
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

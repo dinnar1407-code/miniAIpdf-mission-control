@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useT } from '@/lib/i18n';
 
 export default function AdminLogin() {
   const router = useRouter();
+  const t = useT();
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,14 +24,14 @@ export default function AdminLogin() {
       });
 
       if (!res.ok) {
-        setError('Token 不对');
+        setError(t.loginErrorToken);
         setLoading(false);
         return;
       }
 
       router.push('/autopilot');
     } catch {
-      setError('网络错误');
+      setError(t.loginErrorNetwork);
       setLoading(false);
     }
   }
@@ -37,7 +39,7 @@ export default function AdminLogin() {
   return (
     <div className="flex items-center justify-center min-h-screen p-4 bg-[#0A0A0F]">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold text-center text-white">Mission Ctrl 登录</h1>
+        <h1 className="text-xl font-semibold text-center text-white">{t.loginTitle}</h1>
         <input
           type="password"
           value={token}
@@ -53,7 +55,7 @@ export default function AdminLogin() {
           disabled={loading || !token}
           className="w-full py-2 rounded-md bg-[#6366F1] hover:bg-[#5254CC] disabled:opacity-50 text-sm text-white font-medium transition-colors"
         >
-          {loading ? '验证中...' : '登录'}
+          {loading ? t.loginLoading : t.loginButton}
         </button>
       </form>
     </div>
