@@ -3,20 +3,10 @@ import { PrismaClient }              from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-function isAuthorized(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return true;
-  return req.headers.get("authorization") === `Bearer ${cronSecret}`;
-}
-
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   let decidedBy: string;
   let notes: string | undefined;
   try {

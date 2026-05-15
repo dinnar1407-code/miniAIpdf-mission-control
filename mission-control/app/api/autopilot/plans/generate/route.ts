@@ -4,12 +4,6 @@ import { planFromInsight }           from "@/lib/planner";
 
 export const maxDuration = 60;
 
-function isAuthorized(req: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return true;
-  return req.headers.get("authorization") === `Bearer ${cronSecret}`;
-}
-
 function handleError(err: unknown): NextResponse {
   const msg = err instanceof Error ? err.message : String(err);
   if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2025") {
@@ -23,9 +17,6 @@ function handleError(err: unknown): NextResponse {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
   const { searchParams } = req.nextUrl;
   const insightId = searchParams.get("insightId");
   const dryRun    = searchParams.get("dryRun") === "true";
