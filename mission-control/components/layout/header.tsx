@@ -44,7 +44,7 @@ export function Header({ title, subtitle, actions }: HeaderProps) {
         {/* Language toggle */}
         <button
           onClick={toggle}
-          className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-md bg-[#12121A] border border-[#2A2A3A] text-xs text-[#8B8B9E] hover:text-white hover:border-[#3A3A4A] transition-colors"
+          className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#12121A] border border-[#2A2A3A] text-xs text-[#8B8B9E] hover:text-white hover:border-[#3A3A4A] transition-colors"
           title={locale === 'zh' ? 'Switch to English' : '切换中文'}
         >
           <Languages size={12} />
