@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient }              from "@prisma/client";
 import { inngest }                   from "@/inngest/client";
+import { createMissionFromPlan }     from "@/lib/mission-orchestrator";
 
 const prisma = new PrismaClient();
 
@@ -67,5 +68,12 @@ export async function POST(
 
   void inngest.send({ name: "autopilot/plans.approved", data: { planId } });
 
-  return NextResponse.json(updatedPlan);
+  let mission;
+  try {
+    mission = await createMissionFromPlan(planId);
+  } catch (err) {
+    console.error("createMissionFromPlan failed:", String(err));
+  }
+
+  return NextResponse.json({ ...updatedPlan, missionId: mission?.id ?? null });
 }
