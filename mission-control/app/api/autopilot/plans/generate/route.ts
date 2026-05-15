@@ -41,9 +41,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // POST is user-facing (UI button) — no auth required
   let insightId: string;
   let dryRun = false;
   try {

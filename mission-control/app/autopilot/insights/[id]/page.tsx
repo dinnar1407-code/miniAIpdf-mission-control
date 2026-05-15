@@ -1,9 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import {
   AlertTriangle, TrendingUp, Zap, Trophy,
@@ -125,26 +125,109 @@ function EvidenceSection({ evidence }: { evidence: Evidence }) {
   );
 }
 
+// ── Toast ──────────────────────────────────────────────────────
+function InlineToast({ msg, type, onDone }: { msg: string; type: "success" | "error"; onDone: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 3000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+  return (
+    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm text-white shadow-lg
+      ${type === "success" ? "bg-[#10B981]" : "bg-[#EF4444]"}`}>
+      {msg}
+    </div>
+  );
+}
+
+// ── Plan 卡 ────────────────────────────────────────────────────
+function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerated: () => void }) {
+  const router = useRouter();
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/autopilot/plans/generate", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ insightId: insight.id }),
+      });
+      const data = await res.json() as { plan?: { id: string }; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate plan");
+      return data as { plan: { id: string } };
+    },
+    onSuccess: (data) => {
+      setToast({ msg: "Plan generated", type: "success" });
+      setTimeout(() => router.push(`/autopilot/plans/${data.plan.id}`), 800);
+      onGenerated();
+    },
+    onError: (err) => {
+      setToast({ msg: err instanceof Error ? err.message : "Failed to generate plan", type: "error" });
+    },
+  });
+
+  let body: React.ReactNode;
+
+  if (insight.status === "new") {
+    body = (
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[#555566]">No plan generated yet</p>
+        <button
+          onClick={() => mutate()}
+          disabled={isPending}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#6366F1] text-white font-medium hover:bg-[#5254CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isPending
+            ? <><Loader2 className="w-3 h-3 animate-spin" />Generating plan...</>
+            : "Generate Plan Now"
+          }
+        </button>
+      </div>
+    );
+  } else if (insight.status === "planned") {
+    body = (
+      <div className="space-y-2">
+        {insight.plans.map((plan) => (
+          <Link
+            key={plan.id}
+            href={`/autopilot/plans/${plan.id}`}
+            className="flex items-center justify-between gap-3 bg-[#0A0A0F] rounded-lg px-3 py-2.5 hover:bg-[#1E1E2E] transition-colors"
+          >
+            <p className="text-xs text-white line-clamp-1 flex-1">{plan.objective}</p>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white capitalize"
+                style={{ backgroundColor: PLAN_STATUS_COLOR[plan.status] ?? "#6B7280" }}
+              >
+                {plan.status}
+              </span>
+              <ChevronRight className="w-3 h-3 text-[#555566]" />
+            </div>
+          </Link>
+        ))}
+      </div>
+    );
+  } else if (insight.status === "dismissed") {
+    body = <p className="text-xs text-[#555566]">Insight dismissed, no plan will be generated</p>;
+  } else {
+    body = <p className="text-xs text-[#555566] capitalize">{insight.status}</p>;
+  }
+
+  return (
+    <>
+      {toast && <InlineToast msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
+      <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-white">Generated Plan</h3>
+        {body}
+      </div>
+    </>
+  );
+}
+
 // ── 主页 ────────────────────────────────────────────────────────
 export default function InsightDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const [generating, setGenerating] = useState(false);
 
-  async function handleGeneratePlan() {
-    setGenerating(true);
-    try {
-      const res = await fetch(`/api/autopilot/insights/${id}/generate-plan`, { method: "POST" });
-      const data = await res.json() as { planId?: string; error?: string };
-      if (data.planId) {
-        router.push(`/autopilot/plans/${data.planId}`);
-      }
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["insight", id],
     queryFn: async () => {
       const res = await fetch(`/api/autopilot/insights/${id}`);
@@ -235,50 +318,8 @@ export default function InsightDetailPage() {
             {/* Evidence */}
             <EvidenceSection evidence={insight.evidence} />
 
-            {/* 关联 Plans */}
-            <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-white">关联 Plans</h3>
-              {insight.plans.length === 0 ? (
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-[#555566]">暂无关联 Plan</p>
-                  <button
-                    onClick={handleGeneratePlan}
-                    disabled={generating}
-                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[#6366F1] text-white font-medium hover:bg-[#5254CC] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {generating ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        生成中…
-                      </>
-                    ) : (
-                      "Generate Plan Now"
-                    )}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {insight.plans.map((plan) => (
-                    <Link
-                      key={plan.id}
-                      href={`/autopilot/plans/${plan.id}`}
-                      className="flex items-center justify-between gap-3 bg-[#0A0A0F] rounded-lg px-3 py-2.5 hover:bg-[#1E1E2E] transition-colors"
-                    >
-                      <p className="text-xs text-white line-clamp-1 flex-1">{plan.objective}</p>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span
-                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white capitalize"
-                          style={{ backgroundColor: PLAN_STATUS_COLOR[plan.status] ?? "#6B7280" }}
-                        >
-                          {plan.status}
-                        </span>
-                        <ChevronRight className="w-3 h-3 text-[#555566]" />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+            {/* Generated Plan */}
+            <PlanCard insight={insight} onGenerated={() => refetch()} />
 
             {/* 元信息 */}
             <div className="text-[11px] text-[#555566] space-y-1 pt-1 pb-4">
