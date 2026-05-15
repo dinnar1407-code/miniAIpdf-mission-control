@@ -123,7 +123,7 @@ async function processDripStep(
 
     // 打标签（追加，不覆盖）
     try {
-      const mergedTags = [...new Set([...existingTags, step.tag])].join(", ");
+      const mergedTags = Array.from(new Set([...existingTags, step.tag])).join(", ");
       await shopify.updateCustomer(customer.id, { tags: mergedTags } as Parameters<typeof shopify.updateCustomer>[1]);
     } catch (err) {
       // 标签失败不影响发送计数

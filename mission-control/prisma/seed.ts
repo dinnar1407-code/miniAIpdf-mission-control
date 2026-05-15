@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import goalSeedData from "./seed-data/projects.json";
 
 const prisma = new PrismaClient();
 
@@ -331,11 +332,11 @@ async function main() {
         id: "wf-pulse",
         name: "L0-脉搏扫描",
         description: "每15分钟扫描 BTC/ETH 价格 + 资金费率",
-        trigger: "cron",
+        triggerType: "cron",
         cronExpression: "*/15 * * * *",
         targetAgent: "caishen",
         status: "active",
-        taskTemplate: { message: "📊 L0脉搏扫描：获取BTC/ETH当前价格和主要交易所资金费率", timeoutSeconds: 60 },
+        taskTemplate: JSON.stringify({ message: "📊 L0脉搏扫描：获取BTC/ETH当前价格和主要交易所资金费率", timeoutSeconds: 60 }),
       },
     }),
     prisma.workflow.upsert({
@@ -345,11 +346,11 @@ async function main() {
         id: "wf-scan",
         name: "L1-全币种扫描",
         description: "每小时全交易所费率对比",
-        trigger: "cron",
+        triggerType: "cron",
         cronExpression: "0 * * * *",
         targetAgent: "caishen",
         status: "active",
-        taskTemplate: { message: "📊 L1全币种扫描：全交易所资金费率对比分析", timeoutSeconds: 90 },
+        taskTemplate: JSON.stringify({ message: "📊 L1全币种扫描：全交易所资金费率对比分析", timeoutSeconds: 90 }),
       },
     }),
     prisma.workflow.upsert({
@@ -359,11 +360,11 @@ async function main() {
         id: "wf-heartbeat",
         name: "全员心跳审计",
         description: "每小时ping所有Agent确认存活",
-        trigger: "cron",
+        triggerType: "cron",
         cronExpression: "0 * * * *",
         targetAgent: "playfish",
         status: "active",
-        taskTemplate: { message: "🫀 心跳审计：检查PM01/Admin01/DFM/Caishen上次活跃时间，超时告警", timeoutSeconds: 30 },
+        taskTemplate: JSON.stringify({ message: "🫀 心跳审计：检查PM01/Admin01/DFM/Caishen上次活跃时间，超时告警", timeoutSeconds: 30 }),
       },
     }),
     prisma.workflow.upsert({
@@ -373,11 +374,11 @@ async function main() {
         id: "wf-battle-report",
         name: "战报自动补报",
         description: "每天凌晨5分钟检查当日战报是否生成，未生成则通知补写",
-        trigger: "cron",
+        triggerType: "cron",
         cronExpression: "5 0 * * *",
         targetAgent: "playfish",
         status: "active",
-        taskTemplate: { message: "📋 战报补报检查：所有Agent昨日战报是否已写入？缺失则通知", timeoutSeconds: 30 },
+        taskTemplate: JSON.stringify({ message: "📋 战报补报检查：所有Agent昨日战报是否已写入？缺失则通知", timeoutSeconds: 30 }),
       },
     }),
     prisma.workflow.upsert({
@@ -387,15 +388,53 @@ async function main() {
         id: "wf-brain",
         name: "第二大脑聚合",
         description: "每天凌晨30分聚合所有Agent知识到第二大脑",
-        trigger: "cron",
+        triggerType: "cron",
         cronExpression: "30 0 * * *",
         targetAgent: "playfish",
         status: "active",
-        taskTemplate: { message: "🧠 第二大脑聚合：同步Obsidian/知识库更新，索引今日新增内容", timeoutSeconds: 60 },
+        taskTemplate: JSON.stringify({ message: "🧠 第二大脑聚合：同步Obsidian/知识库更新，索引今日新增内容", timeoutSeconds: 60 }),
       },
     }),
   ]);
   console.log(`✅ ${workflows.length} Preset Workflows created`);
+
+  // --- Goals (Autopilot Phase 1.2) ---
+  let goalInserted = 0;
+  let goalSkipped = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const projectData of goalSeedData.projects) {
+      const project = projects.find((p) => p.slug === projectData.slug);
+      if (!project) continue;
+
+      for (const g of projectData.goals) {
+        const existing = await tx.goal.findUnique({
+          where: { projectId_kpi: { projectId: project.id, kpi: g.kpi } },
+        });
+        if (existing) {
+          goalSkipped++;
+        } else {
+          await tx.goal.create({
+            data: {
+              projectId: project.id,
+              kpi: g.kpi,
+              unit: g.unit,
+              baseline: g.baseline,
+              target: g.target,
+              cadence: g.cadence,
+              deadline: new Date(g.deadline),
+              status: "on_track",
+            },
+          });
+          goalInserted++;
+        }
+      }
+    }
+  });
+
+  console.log(
+    `✅ Goals: ${goalInserted} inserted, ${goalSkipped} skipped (already exist)`
+  );
 
   console.log("\n🎉 Seed complete!");
 }

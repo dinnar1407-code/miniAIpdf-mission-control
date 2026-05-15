@@ -112,7 +112,7 @@ export async function writeAgentMemory(params: {
 
     await prisma.agentMemory.upsert({
       where: {
-        agentId_type_key_projectId: { agentId, type, key, projectId: projectId ?? null },
+        agentId_type_key_projectId: { agentId, type, key, projectId: (projectId ?? null) as string },
       },
       update: {
         value,

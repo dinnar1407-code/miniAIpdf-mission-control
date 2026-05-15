@@ -78,7 +78,7 @@ export async function runAngelScanner(): Promise<AngelScanResult> {
     const newTags: string[] = [];
     if (shouldBeAngel) newTags.push("angel-customer");
     if (shouldBeLoyal) newTags.push("loyal-customer");
-    const mergedTags = [...new Set([...existingTags, ...newTags])].join(", ");
+    const mergedTags = Array.from(new Set([...existingTags, ...newTags])).join(", ");
 
     // 打标签
     try {

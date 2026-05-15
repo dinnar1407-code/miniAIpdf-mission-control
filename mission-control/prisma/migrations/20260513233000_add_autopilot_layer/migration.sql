@@ -1,3 +1,10 @@
+-- This migration was generated via `prisma migrate diff --from-empty`
+-- and incidentally includes two pre-existing, intentional changes that
+-- were pending in the schema at the time:
+--   1. AgentMemory: add projectId column + scope unique index by projectId (Fix 10)
+--   2. Workflow.taskTemplate: relax column type to TEXT
+-- The autopilot-layer-specific changes start below.
+
 -- CreateExtension
 CREATE EXTENSION IF NOT EXISTS "vector";
 
@@ -28,267 +35,14 @@ CREATE TYPE "MemoryKind" AS ENUM ('insight_summary', 'feedback_lesson', 'playboo
 -- CreateEnum
 CREATE TYPE "ApprovalDecision" AS ENUM ('pending', 'approved', 'rejected', 'expired', 'escalated');
 
--- CreateTable
-CREATE TABLE "Project" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "description" TEXT,
-    "color" TEXT NOT NULL DEFAULT '#3B82F6',
-    "emoji" TEXT NOT NULL DEFAULT '📦',
-    "status" TEXT NOT NULL DEFAULT 'active',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+-- DropIndex
+DROP INDEX "AgentMemory_agentId_type_key_key";
 
-    CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
-);
+-- AlterTable
+ALTER TABLE "AgentMemory" ADD COLUMN     "projectId" TEXT;
 
--- CreateTable
-CREATE TABLE "Agent" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'idle',
-    "currentTask" TEXT,
-    "lastActiveAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "config" TEXT NOT NULL DEFAULT '{}',
-
-    CONSTRAINT "Agent_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "AgentAssignment" (
-    "id" TEXT NOT NULL,
-    "agentId" TEXT NOT NULL,
-    "projectId" TEXT NOT NULL,
-    "role" TEXT NOT NULL DEFAULT 'contributor',
-    "assignedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "AgentAssignment_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Task" (
-    "id" TEXT NOT NULL,
-    "title" TEXT NOT NULL,
-    "description" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'todo',
-    "priority" TEXT NOT NULL DEFAULT 'medium',
-    "projectId" TEXT,
-    "agentId" TEXT,
-    "dueDate" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "completedAt" TIMESTAMP(3),
-
-    CONSTRAINT "Task_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ContentItem" (
-    "id" TEXT NOT NULL,
-    "title" TEXT NOT NULL,
-    "platform" TEXT NOT NULL,
-    "type" TEXT NOT NULL DEFAULT 'post',
-    "status" TEXT NOT NULL DEFAULT 'draft',
-    "scheduledFor" TIMESTAMP(3),
-    "publishedAt" TIMESTAMP(3),
-    "publishedUrl" TEXT,
-    "metricsJson" TEXT NOT NULL DEFAULT '{}',
-    "projectId" TEXT,
-    "agentId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ContentItem_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Alert" (
-    "id" TEXT NOT NULL,
-    "severity" TEXT NOT NULL,
-    "source" TEXT NOT NULL DEFAULT 'system',
-    "message" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'new',
-    "projectId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "acknowledgedAt" TIMESTAMP(3),
-    "resolvedAt" TIMESTAMP(3),
-
-    CONSTRAINT "Alert_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "MetricSnapshot" (
-    "id" TEXT NOT NULL,
-    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "platform" TEXT NOT NULL,
-    "metric" TEXT NOT NULL,
-    "value" DOUBLE PRECISION NOT NULL,
-    "metadata" TEXT NOT NULL DEFAULT '{}',
-    "projectId" TEXT,
-
-    CONSTRAINT "MetricSnapshot_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ActivityLog" (
-    "id" TEXT NOT NULL,
-    "agentId" TEXT,
-    "action" TEXT NOT NULL,
-    "target" TEXT,
-    "result" TEXT,
-    "projectId" TEXT,
-    "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ActivityLog_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Workflow" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "description" TEXT,
-    "triggerType" TEXT NOT NULL DEFAULT 'manual',
-    "triggerConfig" TEXT NOT NULL DEFAULT '{}',
-    "cronExpression" TEXT,
-    "targetAgent" TEXT,
-    "taskTemplate" TEXT NOT NULL DEFAULT '{}',
-    "steps" TEXT NOT NULL DEFAULT '[]',
-    "status" TEXT NOT NULL DEFAULT 'draft',
-    "projectId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "Workflow_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "WorkflowRun" (
-    "id" TEXT NOT NULL,
-    "workflowId" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'pending',
-    "currentStep" INTEGER NOT NULL DEFAULT 0,
-    "totalSteps" INTEGER NOT NULL DEFAULT 0,
-    "startedAt" TIMESTAMP(3),
-    "completedAt" TIMESTAMP(3),
-    "duration" INTEGER,
-    "triggerData" TEXT NOT NULL DEFAULT '{}',
-    "stepResults" TEXT NOT NULL DEFAULT '[]',
-    "result" TEXT,
-    "error" TEXT,
-    "taskId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "WorkflowRun_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "WorkflowLog" (
-    "id" TEXT NOT NULL,
-    "runId" TEXT NOT NULL,
-    "stepIndex" INTEGER NOT NULL DEFAULT -1,
-    "stepType" TEXT NOT NULL DEFAULT 'system',
-    "message" TEXT NOT NULL,
-    "level" TEXT NOT NULL DEFAULT 'info',
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "WorkflowLog_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ApiKey" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "key" TEXT NOT NULL,
-    "permissions" TEXT NOT NULL DEFAULT 'read',
-    "lastUsedAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expiresAt" TIMESTAMP(3),
-    "active" BOOLEAN NOT NULL DEFAULT true,
-
-    CONSTRAINT "ApiKey_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ChannelCredential" (
-    "id" TEXT NOT NULL,
-    "channelId" TEXT NOT NULL,
-    "enabled" BOOLEAN NOT NULL DEFAULT false,
-    "credentials" TEXT NOT NULL DEFAULT '{}',
-    "defaults" TEXT NOT NULL DEFAULT '{}',
-    "testedAt" TIMESTAMP(3),
-    "testResult" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "ChannelCredential_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "AgentMemory" (
-    "id" TEXT NOT NULL,
-    "agentId" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "key" TEXT NOT NULL,
-    "value" TEXT NOT NULL,
-    "projectId" TEXT,
-    "expiresAt" TIMESTAMP(3),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "AgentMemory_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "KpiSnapshot" (
-    "id" TEXT NOT NULL,
-    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "projectId" TEXT,
-    "source" TEXT NOT NULL,
-    "metric" TEXT NOT NULL,
-    "value" DOUBLE PRECISION NOT NULL,
-    "delta" DOUBLE PRECISION,
-    "metadata" TEXT NOT NULL DEFAULT '{}',
-
-    CONSTRAINT "KpiSnapshot_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ContentCalendar" (
-    "id" TEXT NOT NULL,
-    "projectId" TEXT,
-    "channelIds" TEXT NOT NULL DEFAULT '[]',
-    "title" TEXT NOT NULL,
-    "body" TEXT NOT NULL,
-    "contentType" TEXT NOT NULL DEFAULT 'short_post',
-    "status" TEXT NOT NULL DEFAULT 'draft',
-    "scheduledFor" TIMESTAMP(3),
-    "publishedAt" TIMESTAMP(3),
-    "publishResults" TEXT NOT NULL DEFAULT '{}',
-    "workflowRunId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "ContentCalendar_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ApprovalRequest" (
-    "id" TEXT NOT NULL,
-    "workflowRunId" TEXT,
-    "contentId" TEXT,
-    "type" TEXT NOT NULL DEFAULT 'content',
-    "title" TEXT NOT NULL,
-    "preview" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'pending',
-    "approvalCode" TEXT NOT NULL,
-    "telegramMsgId" TEXT,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "respondedAt" TIMESTAMP(3),
-    "respondedBy" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "ApprovalRequest_pkey" PRIMARY KEY ("id")
-);
+-- AlterTable
+ALTER TABLE "Workflow" ALTER COLUMN "taskTemplate" SET DATA TYPE TEXT;
 
 -- CreateTable
 CREATE TABLE "Goal" (
@@ -456,27 +210,6 @@ CREATE TABLE "Playbook" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Project_slug_key" ON "Project"("slug");
-
--- CreateIndex
-CREATE UNIQUE INDEX "AgentAssignment_agentId_projectId_key" ON "AgentAssignment"("agentId", "projectId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ApiKey_key_key" ON "ApiKey"("key");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ChannelCredential_channelId_key" ON "ChannelCredential"("channelId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "AgentMemory_agentId_type_key_projectId_key" ON "AgentMemory"("agentId", "type", "key", "projectId");
-
--- CreateIndex
-CREATE INDEX "KpiSnapshot_projectId_metric_date_idx" ON "KpiSnapshot"("projectId", "metric", "date");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ApprovalRequest_approvalCode_key" ON "ApprovalRequest"("approvalCode");
-
--- CreateIndex
 CREATE INDEX "Goal_status_idx" ON "Goal"("status");
 
 -- CreateIndex
@@ -530,50 +263,8 @@ CREATE INDEX "Approval_decision_createdAt_idx" ON "Approval"("decision", "create
 -- CreateIndex
 CREATE INDEX "Playbook_projectId_isActive_idx" ON "Playbook"("projectId", "isActive");
 
--- AddForeignKey
-ALTER TABLE "AgentAssignment" ADD CONSTRAINT "AgentAssignment_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AgentAssignment" ADD CONSTRAINT "AgentAssignment_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Task" ADD CONSTRAINT "Task_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Task" ADD CONSTRAINT "Task_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ContentItem" ADD CONSTRAINT "ContentItem_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ContentItem" ADD CONSTRAINT "ContentItem_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Alert" ADD CONSTRAINT "Alert_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "MetricSnapshot" ADD CONSTRAINT "MetricSnapshot_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ActivityLog" ADD CONSTRAINT "ActivityLog_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Workflow" ADD CONSTRAINT "Workflow_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "WorkflowRun" ADD CONSTRAINT "WorkflowRun_workflowId_fkey" FOREIGN KEY ("workflowId") REFERENCES "Workflow"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "WorkflowRun" ADD CONSTRAINT "WorkflowRun_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "WorkflowLog" ADD CONSTRAINT "WorkflowLog_runId_fkey" FOREIGN KEY ("runId") REFERENCES "WorkflowRun"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "AgentMemory" ADD CONSTRAINT "AgentMemory_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "KpiSnapshot" ADD CONSTRAINT "KpiSnapshot_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+-- CreateIndex
+CREATE UNIQUE INDEX "AgentMemory_agentId_type_key_projectId_key" ON "AgentMemory"("agentId", "type", "key", "projectId");
 
 -- AddForeignKey
 ALTER TABLE "Goal" ADD CONSTRAINT "Goal_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -611,8 +302,5 @@ ALTER TABLE "Approval" ADD CONSTRAINT "Approval_planId_fkey" FOREIGN KEY ("planI
 -- AddForeignKey
 ALTER TABLE "Playbook" ADD CONSTRAINT "Playbook_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
-
--- CreateIndex (pgvector HNSW — spec requirement)
-CREATE INDEX memory_embedding_hnsw_idx
-  ON "Memory" USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64);
+-- CreateIndex (HNSW for vector similarity search)
+CREATE INDEX memory_embedding_hnsw_idx ON "Memory" USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);

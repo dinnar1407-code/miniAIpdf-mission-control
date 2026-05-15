@@ -381,9 +381,9 @@ model Plan {
 
   status PlanStatus @default(draft)
 
-  steps    PlanStep[]
-  missions Mission[]
-  approval Approval?
+  steps        PlanStep[]
+  missions     Mission[]
+  planApproval PlanApproval?
 
   generatedBy String
   createdAt   DateTime @default(now())
@@ -519,8 +519,8 @@ enum MemoryKind {
   postmortem
 }
 
-// 8. APPROVAL — HITL 关卡
-model Approval {
+// 8. PLAN APPROVAL — Plan 级战略审批 (区别于 ApprovalRequest 的 workflow step 级审批)
+model PlanApproval {
   id     String @id @default(cuid())
   planId String @unique
   plan   Plan   @relation(fields: [planId], references: [id])

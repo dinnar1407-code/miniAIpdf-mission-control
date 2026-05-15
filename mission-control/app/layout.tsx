@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/sidebar";
+import { Sidebar }   from "@/components/layout/sidebar";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { Providers }  from "@/components/providers";
 
 export const viewport: Viewport = {
   themeColor: "#0A0A0F",
@@ -46,7 +47,7 @@ export default function RootLayout({
 
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto">
-            {children}
+            <Providers>{children}</Providers>
           </main>
         </div>
 

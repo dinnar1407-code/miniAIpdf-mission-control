@@ -746,7 +746,7 @@ export function createToolExecutor(
         // 先获取现有标签，追加而不是覆盖
         const { customer } = await shopify.getCustomer(customerId);
         const existingTags = customer.tags ? customer.tags.split(",").map(t => t.trim()).filter(Boolean) : [];
-        const mergedTags   = [...new Set([...existingTags, ...newTags])].join(", ");
+        const mergedTags   = Array.from(new Set([...existingTags, ...newTags])).join(", ");
 
         const updateData: Record<string, string> = { tags: mergedTags };
         if (input.note) updateData.note = String(input.note);

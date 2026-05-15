@@ -11,6 +11,7 @@ import {
   Bell,
   Settings,
   Workflow,
+  Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +31,9 @@ const navItems = [
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/workflows", label: "Workflows", icon: Workflow },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/workflows",       label: "Workflows", icon: Workflow },
+  { href: "/autopilot",       label: "Autopilot", icon: Cpu      },
+  { href: "/settings",        label: "Settings",  icon: Settings },
 ];
 
 export function Sidebar() {

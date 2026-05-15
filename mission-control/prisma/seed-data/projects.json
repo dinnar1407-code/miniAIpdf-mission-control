@@ -1,0 +1,52 @@
+{
+  "projects": [
+    {
+      "slug": "miniaipdf",
+      "goals": [
+        { "kpi": "mrr",             "unit": "usd",   "baseline": 0, "target": 0, "cadence": "monthly", "deadline": "2026-08-31" },
+        { "kpi": "daily_signups",   "unit": "count", "baseline": 0, "target": 0, "cadence": "daily",   "deadline": "2026-08-31" },
+        { "kpi": "pdf_conversions", "unit": "count", "baseline": 0, "target": 0, "cadence": "daily",   "deadline": "2026-08-31" }
+      ]
+    },
+    {
+      "slug": "furm8s",
+      "goals": [
+        { "kpi": "mau",             "unit": "count", "baseline": 0, "target": 0, "cadence": "monthly", "deadline": "2026-08-31" },
+        { "kpi": "daily_signups",   "unit": "count", "baseline": 0, "target": 0, "cadence": "daily",   "deadline": "2026-08-31" },
+        { "kpi": "engagement_rate", "unit": "pct",   "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" }
+      ]
+    },
+    {
+      "slug": "niw",
+      "goals": [
+        { "kpi": "monthly_inquiries",     "unit": "count", "baseline": 0, "target": 0, "cadence": "monthly", "deadline": "2026-08-31" },
+        { "kpi": "consultation_bookings", "unit": "count", "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" },
+        { "kpi": "conversion_rate",       "unit": "pct",   "baseline": 0, "target": 0, "cadence": "monthly", "deadline": "2026-08-31" }
+      ]
+    },
+    {
+      "slug": "talengineer",
+      "goals": [
+        { "kpi": "active_users",   "unit": "count", "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" },
+        { "kpi": "weekly_matches", "unit": "count", "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" },
+        { "kpi": "mrr",            "unit": "usd",   "baseline": 0, "target": 0, "cadence": "monthly", "deadline": "2026-08-31" }
+      ]
+    },
+    {
+      "slug": "wheatcoin",
+      "goals": [
+        { "kpi": "holders",      "unit": "count", "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" },
+        { "kpi": "daily_volume", "unit": "usd",   "baseline": 0, "target": 0, "cadence": "daily",   "deadline": "2026-08-31" },
+        { "kpi": "tvl",          "unit": "usd",   "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" }
+      ]
+    },
+    {
+      "slug": "dinnar",
+      "goals": [
+        { "kpi": "followers",       "unit": "count", "baseline": 0, "target": 0, "cadence": "weekly",  "deadline": "2026-08-31" },
+        { "kpi": "content_views",   "unit": "count", "baseline": 0, "target": 0, "cadence": "daily",   "deadline": "2026-08-31" },
+        { "kpi": "newsletter_subs", "unit": "count", "baseline": 0, "target": 0, "cadence": "monthly", "deadline": "2026-08-31" }
+      ]
+    }
+  ]
+}
