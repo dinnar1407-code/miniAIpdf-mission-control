@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CheckSquare, BarChart3, Bot, Calendar } from "lucide-react";
+import { LayoutDashboard, CheckSquare, Bot, Calendar, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const mobileNavItems = [
@@ -10,7 +10,7 @@ const mobileNavItems = [
   { href: "/tasks",      label: "Tasks",     icon: CheckSquare },
   { href: "/content",    label: "Content",   icon: Calendar },
   { href: "/agents",     label: "Agents",    icon: Bot },
-  { href: "/analytics",  label: "Analytics", icon: BarChart3 },
+  { href: "/autopilot",  label: "Autopilot", icon: Cpu },
 ];
 
 export function MobileNav() {
