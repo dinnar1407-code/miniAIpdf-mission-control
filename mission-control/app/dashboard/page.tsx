@@ -127,14 +127,14 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
-        title="Mission Control"
+        title={t.dashTitle}
         subtitle={
           <span className="flex items-center gap-2 text-sm text-[#8B8B9E]">
-            Playfish Universal Platform · All Projects
+            {t.dashSubtitle}
             {live && (
               <span className="flex items-center gap-1 text-green-400 text-xs">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                Live
+                {t.dashLive}
               </span>
             )}
             {lastUpdated && (
@@ -171,7 +171,7 @@ export default function DashboardPage() {
             changeType="up"
             icon="💰"
             color="#10B981"
-            subtitle="MRR across projects"
+            subtitle={t.dashMRR}
           />
           <StatCard
             label="Total Users"
@@ -180,7 +180,7 @@ export default function DashboardPage() {
             changeType="up"
             icon="👥"
             color="#3B82F6"
-            subtitle="All platforms"
+            subtitle={t.dashAllPlatforms}
           />
           <StatCard
             label="Open Tasks"
@@ -189,7 +189,7 @@ export default function DashboardPage() {
             changeType="neutral"
             icon="📋"
             color="#F59E0B"
-            subtitle="Across all projects"
+            subtitle={t.dashAllProjects}
           />
           <StatCard
             label="Active Agents"
@@ -277,15 +277,15 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-white">Traffic · Last 14 Days</h3>
+              <h3 className="text-sm font-semibold text-white">{t.dashTraffic}</h3>
               <div className="flex items-center gap-4 text-xs text-[#8B8B9E]">
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
-                  Visitors
+                  {t.dashVisitors}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                  Signups
+                  {t.dashSignups}
                 </div>
               </div>
             </div>
@@ -307,7 +307,7 @@ export default function DashboardPage() {
         {/* Project Comparison */}
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-white">Project Comparison · MRR</h3>
+            <h3 className="text-sm font-semibold text-white">{t.dashProjectMRR}</h3>
           </div>
           <ResponsiveContainer width="100%" height={140}>
             <BarChart data={projectComparisonData} barSize={24}>

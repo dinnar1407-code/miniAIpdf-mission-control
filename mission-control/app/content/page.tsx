@@ -109,7 +109,7 @@ export default function ContentPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Content Calendar" subtitle={t.contentSubtitle} />
+      <Header title={t.contentCalendar} subtitle={t.contentSubtitle} />
       <div className="p-4 md:p-6 space-y-4">
 
         {/* Stats */}

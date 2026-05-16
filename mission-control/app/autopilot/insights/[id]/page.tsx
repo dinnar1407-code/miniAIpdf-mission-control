@@ -103,7 +103,7 @@ function EvidenceSection({ evidence }: { evidence: Evidence }) {
           ? <TrendingDown className="w-4 h-4 text-[#EF4444]" />
           : <TrendingUp   className="w-4 h-4 text-[#10B981]" />
         }
-        <h3 className="text-sm font-semibold text-white">Evidence</h3>
+        <h3 className="text-sm font-semibold text-white">{t.insightEvidence}</h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {stats.map((s) => (

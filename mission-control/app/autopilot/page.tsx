@@ -279,7 +279,7 @@ function FeedbackColumn() {
       <div className="flex flex-col items-center justify-center py-12 text-[#555566]">
         <MessageSquare className="w-6 h-6 mb-3 opacity-40" />
         <p className="text-xs text-center leading-relaxed px-4 text-[#3A3A4A]">
-          No feedback yet —<br />will populate after Phase 3
+          {t.autopilotNoFeedback}
         </p>
       </div>
     </div>

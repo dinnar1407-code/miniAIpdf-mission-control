@@ -270,9 +270,9 @@ export default function MissionDetailPage() {
     return (
       <div className="min-h-screen bg-[#0A0A0F] flex flex-col items-center justify-center gap-3">
         <AlertTriangle className="w-8 h-8 text-[#EF4444]" />
-        <p className="text-[#8B8B9E] text-sm">Mission not found</p>
+        <p className="text-[#8B8B9E] text-sm">{t.missionNotFound}</p>
         <Link href="/autopilot/plans" className="text-xs text-[#3B82F6] hover:underline">
-          ← Plans
+          {t.missionBackToPlans}
         </Link>
       </div>
     );
@@ -314,7 +314,7 @@ export default function MissionDetailPage() {
             className="inline-flex items-center gap-1.5 text-xs text-[#8B8B9E] hover:text-white transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Plan
+            {t.missionBackToPlan}
           </Link>
         )}
 
@@ -348,15 +348,15 @@ export default function MissionDetailPage() {
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <p className="text-[10px] text-[#555566] mb-0.5">Started</p>
+              <p className="text-[10px] text-[#555566] mb-0.5">{t.missionStarted}</p>
               <p className="text-xs text-[#8B8B9E]">{mission.startedAt ? t.timeAgo(Date.now() - new Date(mission.startedAt).getTime()) : '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-[#555566] mb-0.5">Completed</p>
+              <p className="text-[10px] text-[#555566] mb-0.5">{t.missionCompleted}</p>
               <p className="text-xs text-[#8B8B9E]">{mission.completedAt ? t.timeAgo(Date.now() - new Date(mission.completedAt).getTime()) : '—'}</p>
             </div>
             <div>
-              <p className="text-[10px] text-[#555566] mb-0.5">Duration</p>
+              <p className="text-[10px] text-[#555566] mb-0.5">{t.missionDuration}</p>
               <p className="text-xs text-[#8B8B9E]">{dur}</p>
             </div>
           </div>

@@ -337,7 +337,7 @@ function IntegrationCard({ integration }: { integration: Integration }) {
       {/* Webhook URL */}
       {integration.webhookUrl && (
         <div className="space-y-2">
-          <p className="text-xs text-[#8B8B9E] font-medium">Webhook URL</p>
+          <p className="text-xs text-[#8B8B9E] font-medium">{t.settingsWebhookUrl}</p>
           <div className="flex items-center gap-2 p-2 bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg">
             <code className="text-xs text-[#8B8B9E] font-mono flex-1 truncate">{integration.webhookUrl}</code>
             <button onClick={() => copyToClipboard(integration.webhookUrl!)}
@@ -604,11 +604,11 @@ export default function SettingsPage() {
 
             <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl divide-y divide-[#2A2A3A]">
               {[
-                { label: "AI Provider",              value: "Anthropic Claude",                        sub: t.settingsAIRow1Sub },
+                { label: t.settingsAIProvider,       value: "Anthropic Claude",                        sub: t.settingsAIRow1Sub },
                 { label: "ANTHROPIC_API_KEY",        value: t.settingsAIApiKeyConfig,                  sub: "Settings → Environment Variables → ANTHROPIC_API_KEY" },
                 { label: t.settingsAIDefaultModel,   value: "claude-haiku-4-5-20251001",               sub: t.settingsAIDefaultModelSub },
                 { label: t.settingsAIFallback,       value: t.settingsAIFallbackValue,                 sub: t.settingsAIFallbackSub },
-                { label: "Agents",                   value: "Playfish · PM01 · DFM · Admin01 · PM01-B", sub: t.settingsAIAgentsSub },
+                { label: t.settingsAIAgents,         value: "Playfish · PM01 · DFM · Admin01 · PM01-B", sub: t.settingsAIAgentsSub },
               ].map(item => (
                 <div key={item.label} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-4">
@@ -640,12 +640,12 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-white">API Keys</h2>
+                <h2 className="text-sm font-semibold text-white">{t.settingsApiKeysTab}</h2>
                 <p className="text-xs text-[#8B8B9E] mt-0.5">{t.settingsApiKeyDesc}</p>
               </div>
               <button onClick={() => setShowForm(f => !f)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-blue-600 text-white text-xs rounded-md transition-colors">
-                <Plus size={13} /> New Key
+                <Plus size={13} /> {t.settingsNewKey}
               </button>
             </div>
 
@@ -672,11 +672,11 @@ export default function SettingsPage() {
                   />
                   <select value={newKeyPerms} onChange={e => setNewKeyPerms(e.target.value)}
                     className="bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
-                    <option value="read">Read</option>
-                    <option value="write">Write</option>
-                    <option value="admin">Admin</option>
+                    <option value="read">{t.settingsRead}</option>
+                    <option value="write">{t.settingsWrite}</option>
+                    <option value="admin">{t.settingsAdmin}</option>
                   </select>
-                  <button onClick={createKey} className="px-4 py-2 bg-[#3B82F6] hover:bg-blue-600 text-white text-sm rounded-lg">Create</button>
+                  <button onClick={createKey} className="px-4 py-2 bg-[#3B82F6] hover:bg-blue-600 text-white text-sm rounded-lg">{t.settingsCreate}</button>
                 </div>
               </div>
             )}
