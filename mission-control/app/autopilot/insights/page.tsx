@@ -48,29 +48,32 @@ function FilterChips({
   value,
   onChange,
   colorMap,
+  labelMap,
 }: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
   colorMap?: Record<string, string>;
+  labelMap?: Record<string, string>;
 }) {
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
       {options.map((opt) => {
         const active = value === opt;
         const color  = colorMap?.[opt];
+        const label  = labelMap?.[opt] ?? opt;
         return (
           <button
             key={opt}
             onClick={() => onChange(opt)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0 capitalize
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors flex-shrink-0
               ${active
                 ? "text-white"
                 : "bg-[#12121A] border border-[#2A2A3A] text-[#8B8B9E] hover:text-white hover:border-[#3A3A4A]"
               }`}
             style={active ? { backgroundColor: color ?? "#6366F1" } : {}}
           >
-            {opt}
+            {label}
           </button>
         );
       })}
@@ -79,11 +82,27 @@ function FilterChips({
 }
 
 function InsightCard({ insight }: { insight: InsightRow }) {
+  const t = useT();
   const { locale } = useLocale();
   const isZh = locale === "zh";
   const title           = isZh ? (insight.titleZh ?? insight.title) : insight.title;
   const summary         = isZh ? (insight.summaryZh ?? insight.summary) : insight.summary;
   const suggestedAction = isZh ? (insight.suggestedActionZh ?? insight.suggestedAction) : insight.suggestedAction;
+
+  const typeLabel: Record<string, string> = {
+    trend: t.insightTypeTrend, anomaly: t.insightTypeAnomaly,
+    opportunity: t.insightTypeOpportunity, risk: t.insightTypeRisk,
+    milestone: t.insightTypeMilestone,
+  };
+  const severityLabel: Record<string, string> = {
+    critical: t.severityCritical, high: t.severityHigh,
+    medium: t.severityMedium, low: t.severityLow,
+  };
+  const statusLabel: Record<string, string> = {
+    new: t.insightStatusNew, acknowledged: t.insightStatusAcknowledged,
+    planned: t.insightStatusPlanned, dismissed: t.insightStatusDismissed,
+    resolved: t.insightStatusResolved, superseded: t.insightStatusSuperseded,
+  };
 
   const severityColor = SEVERITY_COLORS[insight.severity] ?? "#6366F1";
   const icon          = TYPE_ICONS[insight.type] ?? <AlertTriangle className="w-3 h-3" />;
@@ -106,15 +125,15 @@ function InsightCard({ insight }: { insight: InsightRow }) {
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#1A1A28] text-[#8B8B9E] text-xs capitalize">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#1A1A28] text-[#8B8B9E] text-xs">
             {icon}
-            {insight.type}
+            {typeLabel[insight.type] ?? insight.type}
           </span>
           <span
-            className="px-2 py-0.5 rounded-full text-xs font-semibold capitalize text-white"
+            className="px-2 py-0.5 rounded-full text-xs font-semibold text-white"
             style={{ backgroundColor: severityColor }}
           >
-            {insight.severity}
+            {severityLabel[insight.severity] ?? insight.severity}
           </span>
         </div>
       </div>
@@ -131,8 +150,8 @@ function InsightCard({ insight }: { insight: InsightRow }) {
 
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-[#555566]">{ago}</span>
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A1A28] text-[#8B8B9E] capitalize">
-          {insight.status}
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1A1A28] text-[#8B8B9E]">
+          {statusLabel[insight.status] ?? insight.status}
         </span>
       </div>
     </Link>
@@ -141,6 +160,22 @@ function InsightCard({ insight }: { insight: InsightRow }) {
 
 export default function InsightsPage() {
   const t = useT();
+
+  const severityLabelMap: Record<string, string> = {
+    all: t.insightFilterAll, critical: t.severityCritical,
+    high: t.severityHigh, medium: t.severityMedium, low: t.severityLow,
+  };
+  const typeLabelMap: Record<string, string> = {
+    all: t.insightFilterAll, anomaly: t.insightTypeAnomaly,
+    opportunity: t.insightTypeOpportunity, risk: t.insightTypeRisk,
+    trend: t.insightTypeTrend, milestone: t.insightTypeMilestone,
+  };
+  const statusLabelMap: Record<string, string> = {
+    all: t.insightFilterAll, new: t.insightStatusNew,
+    acknowledged: t.insightStatusAcknowledged, planned: t.insightStatusPlanned,
+    dismissed: t.insightStatusDismissed,
+  };
+
   const [insights, setInsights] = useState<InsightRow[]>([]);
   const [total, setTotal]       = useState(0);
   const [loading, setLoading]   = useState(true);
@@ -170,9 +205,9 @@ export default function InsightsPage() {
 
       <div className="p-4 md:p-6 space-y-4">
         <div className="space-y-2">
-          <FilterChips options={SEVERITIES} value={severity} onChange={setSeverity} colorMap={SEVERITY_COLORS} />
-          <FilterChips options={TYPES}      value={type}     onChange={setType} />
-          <FilterChips options={STATUSES}   value={status}   onChange={setStatus} />
+          <FilterChips options={SEVERITIES} value={severity} onChange={setSeverity} colorMap={SEVERITY_COLORS} labelMap={severityLabelMap} />
+          <FilterChips options={TYPES}      value={type}     onChange={setType}     labelMap={typeLabelMap} />
+          <FilterChips options={STATUSES}   value={status}   onChange={setStatus}   labelMap={statusLabelMap} />
         </div>
 
         {loading ? (

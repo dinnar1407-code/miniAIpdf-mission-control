@@ -276,7 +276,7 @@ export default function InsightDetailPage() {
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
-        title={insight?.title ?? "Insight"}
+        title={displayTitle ?? insight?.title ?? "Insight"}
         subtitle={
           insight
             ? `${insight.project?.emoji ?? ""} ${insight.project?.name ?? "—"} · ${new Date(insight.observedAt).toLocaleDateString("zh-CN", { month: "long", day: "numeric" })}`
