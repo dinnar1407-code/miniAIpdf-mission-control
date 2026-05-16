@@ -65,10 +65,12 @@ model AgentAssignment {
 }
 
 model Task {
-  id          String    @id @default(cuid())
-  title       String
-  description String?
-  status      String    @default("todo")
+  id            String    @id @default(cuid())
+  title         String
+  titleZh       String?
+  description   String?
+  descriptionZh String?
+  status        String    @default("todo")
   priority    String    @default("medium")
   projectId   String?
   agentId     String?

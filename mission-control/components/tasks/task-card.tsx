@@ -2,11 +2,14 @@
 
 import { Calendar, Flag, Trash2 } from "lucide-react";
 import { PRIORITY_COLORS } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
 
 interface Task {
   id: string;
   title: string;
+  titleZh?: string;
   description?: string;
+  descriptionZh?: string;
   status: string;
   priority: string;
   projectName?: string;
@@ -31,6 +34,10 @@ const borderColors: Record<string, string> = {
 };
 
 export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
+  const { locale } = useLocale();
+  const isZh = locale === "zh";
+  const displayTitle       = isZh ? (task.titleZh ?? task.title) : task.title;
+  const displayDescription = isZh ? (task.descriptionZh ?? task.description) : task.description;
   const priorityColor    = PRIORITY_COLORS[task.priority] || "#8B8B9E";
   const leftBorderColor  = borderColors[task.priority] || "#5A5A6E";
 
@@ -41,7 +48,7 @@ export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
       onClick={() => onEdit?.(task)}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="text-sm text-white font-medium leading-snug flex-1">{task.title}</div>
+        <div className="text-sm text-white font-medium leading-snug flex-1">{displayTitle}</div>
         <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
           <Flag size={12} style={{ color: priorityColor }} fill={priorityColor} />
           {onDelete && (
@@ -55,8 +62,8 @@ export function TaskCard({ task, onEdit, onDelete }: TaskCardProps) {
         </div>
       </div>
 
-      {task.description && (
-        <div className="text-xs text-[#8B8B9E] mb-2 line-clamp-2">{task.description}</div>
+      {displayDescription && (
+        <div className="text-xs text-[#8B8B9E] mb-2 line-clamp-2">{displayDescription}</div>
       )}
 
       <div className="flex items-center gap-2 flex-wrap">

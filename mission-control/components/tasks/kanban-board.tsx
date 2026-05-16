@@ -9,7 +9,9 @@ import { useT } from "@/lib/i18n";
 interface Task {
   id: string;
   title: string;
+  titleZh?: string;
   description?: string;
+  descriptionZh?: string;
   status: string;
   priority: string;
   projectName?: string;
@@ -51,6 +53,9 @@ const PROJECT_EMOJIS: Record<string, string> = {
 function normalizeTask(t: Task): Task {
   return {
     ...t,
+    description:   t.description   ?? undefined,
+    descriptionZh: t.descriptionZh ?? undefined,
+    titleZh:       t.titleZh       ?? undefined,
     projectName:  t.project?.name  || t.projectName,
     projectColor: t.project?.color || (t.project ? PROJECT_COLORS[t.project.slug] : t.projectColor),
     projectEmoji: t.project ? PROJECT_EMOJIS[t.project.slug] : t.projectEmoji,
