@@ -2,6 +2,7 @@
 
 import { Header } from "@/components/layout/header";
 import { useState } from "react";
+import { useT } from "@/lib/i18n";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -43,12 +44,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function AnalyticsPage() {
+  const t = useT();
   const [days, setDays] = useState(14);
   const data = generateDailyData(days);
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Analytics" subtitle="Cross-project metrics" />
+      <Header title={t.analyticsTitle} subtitle={t.analyticsSubtitle} />
 
       <div className="p-6 space-y-6">
         {/* Date Range */}
@@ -71,16 +73,16 @@ export default function AnalyticsPage() {
         {/* Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: "Total MRR", value: "$2,327", change: "+12%", color: "#10B981" },
-            { label: "Active Users", value: "4,494", change: "+8%", color: "#3B82F6" },
-            { label: "API Calls", value: "847K", change: "+31%", color: "#8B5CF6" },
-            { label: "Conversion", value: "3.2%", change: "+0.4%", color: "#F59E0B" },
+            { label: t.analyticsTotalMRR,    value: "$2,327", change: "+12%", color: "#10B981" },
+            { label: t.analyticsActiveUsers,  value: "4,494",  change: "+8%",  color: "#3B82F6" },
+            { label: t.analyticsApiCalls,     value: "847K",   change: "+31%", color: "#8B5CF6" },
+            { label: t.analyticsConversion,   value: "3.2%",   change: "+0.4%",color: "#F59E0B" },
           ].map((stat) => (
             <div key={stat.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
               <div className="text-2xl font-bold text-white">{stat.value}</div>
               <div className="text-xs text-[#8B8B9E] mt-1">{stat.label}</div>
               <div className="text-xs mt-1" style={{ color: stat.color }}>
-                ↑ {stat.change} vs prev period
+                ↑ {stat.change} {t.analyticsVsPrev}
               </div>
             </div>
           ))}
@@ -89,7 +91,7 @@ export default function AnalyticsPage() {
         {/* Traffic Chart */}
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
           <h3 className="text-sm font-semibold text-white mb-4">
-            Traffic & Signups · {days}d
+            {t.analyticsTrafficTitle(days)}
           </h3>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={data}>
@@ -105,7 +107,7 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* MRR Over Time */}
           <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-white mb-4">MRR Trend</h3>
+            <h3 className="text-sm font-semibold text-white mb-4">{t.analyticsMRRTrend}</h3>
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={data}>
                 <XAxis dataKey="date" tick={{ fill: "#5A5A6E", fontSize: 11 }} axisLine={false} tickLine={false} interval={3} />
@@ -118,7 +120,7 @@ export default function AnalyticsPage() {
 
           {/* Revenue by Project */}
           <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-white mb-4">MRR by Project</h3>
+            <h3 className="text-sm font-semibold text-white mb-4">{t.analyticsMRRByProject}</h3>
             <div className="flex items-center gap-4">
               <PieChart width={150} height={150}>
                 <Pie data={PROJECT_MRR} dataKey="value" cx={70} cy={70} innerRadius={40} outerRadius={65}>
@@ -144,7 +146,7 @@ export default function AnalyticsPage() {
 
         {/* API Calls */}
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-white mb-4">API Calls · {days}d</h3>
+          <h3 className="text-sm font-semibold text-white mb-4">{t.analyticsApiCallsTitle(days)}</h3>
           <ResponsiveContainer width="100%" height={160}>
             <BarChart data={data} barSize={12}>
               <XAxis dataKey="date" tick={{ fill: "#5A5A6E", fontSize: 11 }} axisLine={false} tickLine={false} interval={3} />

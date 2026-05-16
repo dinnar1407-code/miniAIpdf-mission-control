@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import { TaskCard } from "./task-card";
 import { TaskModal } from "./task-modal";
+import { useT } from "@/lib/i18n";
 
 interface Task {
   id: string;
@@ -62,6 +63,14 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ projectFilter = "all" }: KanbanBoardProps) {
+  const t = useT();
+  const columnLabel: Record<string, string> = {
+    todo:        t.kanbanTodo,
+    in_progress: t.kanbanInProgress,
+    review:      t.kanbanReview,
+    done:        t.kanbanDone,
+    blocked:     t.kanbanBlocked,
+  };
   const [tasks, setTasks]           = useState<Task[]>([]);
   const [loading, setLoading]       = useState(true);
   const [isModalOpen, setIsModalOpen]   = useState(false);
@@ -177,7 +186,7 @@ export function KanbanBoard({ projectFilter = "all" }: KanbanBoardProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-[#5A5A6E]">
-        <Loader2 size={20} className="animate-spin mr-2" /> Loading tasks…
+        <Loader2 size={20} className="animate-spin mr-2" /> {t.kanbanLoading}
       </div>
     );
   }
@@ -205,7 +214,7 @@ export function KanbanBoard({ projectFilter = "all" }: KanbanBoardProps) {
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: col.color }} />
-                    <span className="text-xs font-semibold text-white">{col.label}</span>
+                    <span className="text-xs font-semibold text-white">{columnLabel[col.id] ?? col.label}</span>
                     <span className="text-xs text-[#5A5A6E] bg-[#1A1A24] px-1.5 py-0.5 rounded">
                       {colTasks.length}
                     </span>
@@ -240,7 +249,7 @@ export function KanbanBoard({ projectFilter = "all" }: KanbanBoardProps) {
                   {colTasks.length === 0 && (
                     <div className={`flex-1 flex items-center justify-center py-6 ${isDragOver ? "border-2 border-dashed border-[#3B82F6] rounded-lg" : ""}`}>
                       <div className="text-xs text-[#5A5A6E] text-center">
-                        {isDragOver ? "📥 Drop here" : "No tasks"}
+                        {isDragOver ? t.kanbanDropHere : t.kanbanNoTasks}
                       </div>
                     </div>
                   )}

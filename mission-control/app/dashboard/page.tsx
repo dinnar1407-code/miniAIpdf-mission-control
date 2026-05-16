@@ -139,7 +139,7 @@ export default function DashboardPage() {
             )}
             {lastUpdated && (
               <span className="text-xs text-[#5A5A6E]">
-                · Updated {lastUpdated.toLocaleTimeString()}
+                {t.dashUpdatedAt(lastUpdated.toLocaleTimeString())}
               </span>
             )}
           </span>
@@ -150,7 +150,7 @@ export default function DashboardPage() {
         {/* Project Pills */}
         <div className="flex items-center gap-2 flex-wrap">
           <button className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#3B82F6] text-white">
-            All
+            {t.all}
           </button>
           {projects.map((p) => (
             <button
@@ -165,7 +165,7 @@ export default function DashboardPage() {
         {/* Stat Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           <StatCard
-            label="Monthly Revenue"
+            label={t.dashMonthlyRevenue}
             value={`$${(stats.mrr || 0).toLocaleString()}`}
             change={`+${stats.mrrChange || 0}%`}
             changeType="up"
@@ -174,7 +174,7 @@ export default function DashboardPage() {
             subtitle={t.dashMRR}
           />
           <StatCard
-            label="Total Users"
+            label={t.dashTotalUsers}
             value={(stats.users || 0).toLocaleString()}
             change={`+${stats.usersChange || 0}%`}
             changeType="up"
@@ -183,7 +183,7 @@ export default function DashboardPage() {
             subtitle={t.dashAllPlatforms}
           />
           <StatCard
-            label="Open Tasks"
+            label={t.dashOpenTasks}
             value={`${stats.openTasks}/${stats.totalTasks}`}
             change={`${taskPct}%`}
             changeType="neutral"
@@ -192,13 +192,13 @@ export default function DashboardPage() {
             subtitle={t.dashAllProjects}
           />
           <StatCard
-            label="Active Agents"
+            label={t.dashActiveAgents}
             value={`${stats.activeAgents}/${stats.totalAgents}`}
-            change="Active"
+            change={t.dashStatusActive}
             changeType="up"
             icon="🤖"
             color="#8B5CF6"
-            subtitle={`${stats.totalAgents - stats.activeAgents} idle`}
+            subtitle={t.dashIdleCount(stats.totalAgents - stats.activeAgents)}
           />
           <StatCard
             label={t.dashWeeklyWorkflows}
@@ -265,7 +265,7 @@ export default function DashboardPage() {
                   <span className={
                     run.status === "completed" ? "text-[#10B981]" :
                     run.status === "failed"    ? "text-[#EF4444]" : "text-[#5A5A6E]"
-                  }>{run.status}</span>
+                  }>{run.status === "completed" ? t.statusCompleted : run.status === "running" ? t.statusRunning : run.status === "failed" ? t.statusFailed : run.status}</span>
                   <span className="text-[#5A5A6E]">{run.time}</span>
                 </div>
               ))}

@@ -98,7 +98,7 @@ export default function AgentsPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Agents" subtitle={t.agentsSubtitle} />
+      <Header title={t.navAgents} subtitle={t.agentsSubtitle} />
 
       <div className="p-4 md:p-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -169,7 +169,7 @@ export default function AgentsPage() {
                                   ? "bg-[#10B98115] text-[#10B981]"
                                   : "bg-[#2A2A3A] text-[#5A5A6E]"
                               )}>
-                                {agent.status}
+                                {agent.status === "active" ? t.agentStatusActive : t.agentStatusIdle}
                               </span>
                             </div>
                             <div className="text-xs text-[#8B8B9E]">{displayType}</div>
@@ -304,7 +304,7 @@ export default function AgentsPage() {
                         run.status === "completed" ? "text-[#10B981]" :
                         run.status === "failed"    ? "text-[#EF4444]" : "text-[#5A5A6E]"
                       )}>
-                        {run.status}
+                        {run.status === "completed" ? t.statusCompleted : run.status === "running" ? t.statusRunning : run.status === "failed" ? t.statusFailed : run.status}
                       </span>
                     </div>
                   ))}

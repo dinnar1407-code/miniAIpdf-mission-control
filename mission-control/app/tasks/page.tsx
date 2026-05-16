@@ -3,6 +3,7 @@
 import { Header } from "@/components/layout/header";
 import { KanbanBoard } from "@/components/tasks/kanban-board";
 import { useState } from "react";
+import { useT } from "@/lib/i18n";
 
 const PROJECTS = [
   { slug: "all",         name: "All",          emoji: "🌐",  color: "#3B82F6" },
@@ -15,11 +16,12 @@ const PROJECTS = [
 ];
 
 export default function TasksPage() {
+  const t = useT();
   const [selectedProject, setSelectedProject] = useState("all");
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Tasks" subtitle="Kanban board · Real-time" />
+      <Header title={t.navTasks} subtitle={t.tasksSubtitle} />
 
       <div className="p-4 md:p-6">
         {/* Project Filter — horizontal scroll on mobile */}

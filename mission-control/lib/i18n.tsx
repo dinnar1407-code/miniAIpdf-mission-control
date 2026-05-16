@@ -40,7 +40,7 @@ const zh = {
   navContent:    '内容',
   navAnalytics:  '分析',
   navAgents:     '智能体',
-  navAlerts:     '告警',
+  navAlerts:     '警告',
   navWorkflows:  'Workflows',
   navAutopilot:  '自动驾驶',
   navSettings:   '设置',
@@ -331,6 +331,57 @@ const zh = {
   planStatusFailed:       '失败',
   insightPlanGenerated2:  '计划生成成功',
   insightPlanGenFailed:   '计划生成失败',
+
+  // Analytics page
+  analyticsTitle:        '分析',
+  analyticsSubtitle:     '跨项目指标',
+  analyticsTotalMRR:     '月收入',
+  analyticsActiveUsers:  '活跃用户',
+  analyticsApiCalls:     'API 调用',
+  analyticsConversion:   '转化率',
+  analyticsVsPrev:       '较上期',
+  analyticsTrafficTitle: (days: number) => `流量与注册 · ${days}天`,
+  analyticsMRRTrend:     'MRR 趋势',
+  analyticsMRRByProject: '项目 MRR',
+  analyticsApiCallsTitle:(days: number) => `API 调用 · ${days}天`,
+
+  // Alerts page
+  alertsSubtitle:        (critical: number, newCount: number) => `${critical} 严重 · ${newCount} 新`,
+  alertsSeverityWarning: '注意',
+  alertsSeverityInfo:    '信息',
+  alertsStatusNew:       '新建',
+  alertsStatusAck:       '已确认',
+  alertsStatusResolved:  '已解决',
+  alertsAck:             '确认',
+  alertsResolve:         '解决',
+
+  // Tasks page
+  tasksSubtitle:    'Kanban 看板 · 实时',
+
+  // Dashboard extras
+  dashMonthlyRevenue: '月收入',
+  dashTotalUsers:     '用户总数',
+  dashOpenTasks:      '待处理任务',
+  dashActiveAgents:   '活跃智能体',
+  dashIdleCount:      (n: number) => `${n} 空闲`,
+  dashStatusActive:   '运行中',
+  dashUpdatedAt:      (time: string) => `· 更新于 ${time}`,
+
+  // Status labels (run / agent)
+  statusCompleted:   '已完成',
+  statusRunning:     '运行中',
+  agentStatusActive: '活跃',
+  agentStatusIdle:   '空闲',
+
+  // Kanban columns
+  kanbanTodo:       '待办',
+  kanbanInProgress: '进行中',
+  kanbanReview:     '审核中',
+  kanbanDone:       '完成',
+  kanbanBlocked:    '阻塞',
+  kanbanNoTasks:    '暂无任务',
+  kanbanDropHere:   '📥 拖到这里',
+  kanbanLoading:    '加载任务中…',
 };
 
 // ── en dictionary (must match zh shape exactly) ────────────────────────────
@@ -646,6 +697,57 @@ const en: typeof zh = {
   planStatusFailed:       'Failed',
   insightPlanGenerated2:  'Plan generated',
   insightPlanGenFailed:   'Failed to generate plan',
+
+  // Analytics page
+  analyticsTitle:        'Analytics',
+  analyticsSubtitle:     'Cross-project metrics',
+  analyticsTotalMRR:     'Total MRR',
+  analyticsActiveUsers:  'Active Users',
+  analyticsApiCalls:     'API Calls',
+  analyticsConversion:   'Conversion',
+  analyticsVsPrev:       'vs prev period',
+  analyticsTrafficTitle: (days: number) => `Traffic & Signups · ${days}d`,
+  analyticsMRRTrend:     'MRR Trend',
+  analyticsMRRByProject: 'MRR by Project',
+  analyticsApiCallsTitle:(days: number) => `API Calls · ${days}d`,
+
+  // Alerts page
+  alertsSubtitle:        (critical: number, newCount: number) => `${critical} critical · ${newCount} new`,
+  alertsSeverityWarning: 'Warning',
+  alertsSeverityInfo:    'Info',
+  alertsStatusNew:       'New',
+  alertsStatusAck:       'Acknowledged',
+  alertsStatusResolved:  'Resolved',
+  alertsAck:             'Ack',
+  alertsResolve:         'Resolve',
+
+  // Tasks page
+  tasksSubtitle:    'Kanban board · Real-time',
+
+  // Dashboard extras
+  dashMonthlyRevenue: 'Monthly Revenue',
+  dashTotalUsers:     'Total Users',
+  dashOpenTasks:      'Open Tasks',
+  dashActiveAgents:   'Active Agents',
+  dashIdleCount:      (n: number) => `${n} idle`,
+  dashStatusActive:   'Active',
+  dashUpdatedAt:      (time: string) => `· Updated ${time}`,
+
+  // Status labels (run / agent)
+  statusCompleted:   'Completed',
+  statusRunning:     'Running',
+  agentStatusActive: 'active',
+  agentStatusIdle:   'idle',
+
+  // Kanban columns
+  kanbanTodo:       'To Do',
+  kanbanInProgress: 'In Progress',
+  kanbanReview:     'Review',
+  kanbanDone:       'Done',
+  kanbanBlocked:    'Blocked',
+  kanbanNoTasks:    'No tasks',
+  kanbanDropHere:   '📥 Drop here',
+  kanbanLoading:    'Loading tasks…',
 };
 
 const dict = { zh, en } as const;

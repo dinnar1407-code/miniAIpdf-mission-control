@@ -4,6 +4,7 @@ import { Header } from "@/components/layout/header";
 import { useState } from "react";
 import { AlertCircle, AlertTriangle, Info, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 const INITIAL_ALERTS = [
   {
@@ -81,6 +82,7 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function AlertsPage() {
+  const t = useT();
   const [alerts, setAlerts] = useState(INITIAL_ALERTS);
   const [filter, setFilter] = useState("all");
 
@@ -94,18 +96,36 @@ export default function AlertsPage() {
 
   const filtered = filter === "all" ? alerts : alerts.filter((a) => a.status === filter);
   const criticalCount = alerts.filter((a) => a.severity === "critical" && a.status === "new").length;
+  const newCount = alerts.filter(a => a.status === "new").length;
+
+  const filterLabels: Record<string, string> = {
+    all:          t.all,
+    new:          t.alertsStatusNew,
+    acknowledged: t.alertsStatusAck,
+    resolved:     t.alertsStatusResolved,
+  };
+  const statusText: Record<string, string> = {
+    new:          t.alertsStatusNew,
+    acknowledged: t.alertsStatusAck,
+    resolved:     t.alertsStatusResolved,
+  };
+  const severityLabel: Record<string, string> = {
+    critical: t.severityCritical,
+    warning:  t.alertsSeverityWarning,
+    info:     t.alertsSeverityInfo,
+  };
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Alerts" subtitle={`${criticalCount} critical · ${alerts.filter(a => a.status === 'new').length} new`} />
+      <Header title={t.navAlerts} subtitle={t.alertsSubtitle(criticalCount, newCount)} />
 
       <div className="p-6">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
-            { label: "Critical", count: alerts.filter(a => a.severity === "critical" && a.status !== "resolved").length, color: "#EF4444" },
-            { label: "Warning", count: alerts.filter(a => a.severity === "warning" && a.status !== "resolved").length, color: "#F59E0B" },
-            { label: "Resolved", count: alerts.filter(a => a.status === "resolved").length, color: "#10B981" },
+            { label: t.severityCritical,       count: alerts.filter(a => a.severity === "critical" && a.status !== "resolved").length, color: "#EF4444" },
+            { label: t.alertsSeverityWarning,  count: alerts.filter(a => a.severity === "warning"  && a.status !== "resolved").length, color: "#F59E0B" },
+            { label: t.alertsStatusResolved,   count: alerts.filter(a => a.status === "resolved").length,                              color: "#10B981" },
           ].map((stat) => (
             <div key={stat.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4 text-center">
               <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.count}</div>
@@ -121,13 +141,13 @@ export default function AlertsPage() {
               key={f}
               onClick={() => setFilter(f)}
               className={cn(
-                "px-3 py-1.5 rounded-full text-xs font-medium capitalize transition-colors",
+                "px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
                 filter === f
                   ? "bg-[#3B82F6] text-white"
                   : "bg-[#12121A] border border-[#2A2A3A] text-[#8B8B9E] hover:text-white"
               )}
             >
-              {f} {f === "all" ? `(${alerts.length})` : `(${alerts.filter(a => a.status === f).length})`}
+              {filterLabels[f] ?? f} {f === "all" ? `(${alerts.length})` : `(${alerts.filter(a => a.status === f).length})`}
             </button>
           ))}
         </div>
@@ -168,7 +188,7 @@ export default function AlertsPage() {
                           <span className="text-xs text-[#5A5A6E]">·</span>
                           <span className="text-xs text-[#5A5A6E]">{alert.time}</span>
                           <span className={cn("text-xs px-1.5 py-0.5 rounded ml-auto", statusStyles[alert.status])}>
-                            {alert.status}
+                            {statusText[alert.status] ?? alert.status}
                           </span>
                         </div>
                       </div>
@@ -179,7 +199,7 @@ export default function AlertsPage() {
                             onClick={() => acknowledge(alert.id)}
                             className="text-xs px-2 py-1 rounded bg-[#F59E0B15] text-[#F59E0B] hover:bg-[#F59E0B25] transition-colors"
                           >
-                            Ack
+                            {t.alertsAck}
                           </button>
                           <button
                             onClick={() => resolve(alert.id)}
@@ -194,7 +214,7 @@ export default function AlertsPage() {
                           onClick={() => resolve(alert.id)}
                           className="text-xs px-2 py-1 rounded bg-[#10B98115] text-[#10B981] hover:bg-[#10B98125] transition-colors flex-shrink-0"
                         >
-                          Resolve
+                          {t.alertsResolve}
                         </button>
                       )}
                     </div>
