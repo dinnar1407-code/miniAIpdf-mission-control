@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
-import { useT } from "@/lib/i18n";
+import { useT, useLocale } from "@/lib/i18n";
 import {
   AlertTriangle, TrendingUp, Zap, Trophy, Loader2,
   CheckCircle2, XCircle, Clock, Radio, MessageSquare, Rocket,
@@ -15,7 +15,9 @@ interface InsightRow {
   type: string;
   severity: string;
   title: string;
+  titleZh?: string | null;
   summary: string;
+  summaryZh?: string | null;
   status: string;
   observedAt: string;
   createdAt: string;
@@ -87,6 +89,15 @@ function ColumnHeader({
 }
 
 function InsightCard({ insight }: { insight: InsightRow }) {
+  const t = useT();
+  const { locale } = useLocale();
+  const isZh   = locale === "zh";
+  const title   = isZh ? (insight.titleZh ?? insight.title) : insight.title;
+  const summary = isZh ? (insight.summaryZh ?? insight.summary) : insight.summary;
+  const severityLabel: Record<string, string> = {
+    critical: t.severityCritical, high: t.severityHigh,
+    medium: t.severityMedium, low: t.severityLow,
+  };
   const color = SEVERITY_COLOR[insight.severity] ?? "#6B7280";
   const bg    = SEVERITY_BG[insight.severity]    ?? "bg-gray-500/10";
   return (
@@ -100,18 +111,18 @@ function InsightCard({ insight }: { insight: InsightRow }) {
             {TYPE_ICONS[insight.type] ?? <AlertTriangle className="w-3 h-3" />}
           </span>
           <p className="text-xs font-medium text-white leading-tight line-clamp-2">
-            {insight.title}
+            {title}
           </p>
         </div>
         <span
           className={`flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${bg}`}
           style={{ color }}
         >
-          {insight.severity}
+          {severityLabel[insight.severity] ?? insight.severity}
         </span>
       </div>
       <p className="text-[11px] text-[#8B8B9E] leading-relaxed line-clamp-2">
-        {insight.summary}
+        {summary}
       </p>
       <div className="flex items-center justify-between pt-1">
         <span className="text-[10px] text-[#555566]">
