@@ -4,14 +4,15 @@ import { Header } from "@/components/layout/header";
 import { useState } from "react";
 import { AlertCircle, AlertTriangle, Info, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { useT, useLocale } from "@/lib/i18n";
 
 const INITIAL_ALERTS = [
   {
     id: "1",
     severity: "critical",
     source: "platform",
-    message: "Product Hunt launch detected — agents deployed and monitoring comments",
+    message:   "Product Hunt launch detected — agents deployed and monitoring comments",
+    messageZh: "检测到 Product Hunt 发布 — 已部署智能体，正在监控评论",
     project: "MiniAIPDF",
     projectColor: "#3B82F6",
     status: "new",
@@ -21,7 +22,8 @@ const INITIAL_ALERTS = [
     id: "2",
     severity: "warning",
     source: "system",
-    message: "API error rate elevated to 2.3% — investigating root cause",
+    message:   "API error rate elevated to 2.3% — investigating root cause",
+    messageZh: "API 错误率上升至 2.3% — 正在排查根本原因",
     project: "MiniAIPDF",
     projectColor: "#3B82F6",
     status: "acknowledged",
@@ -31,7 +33,8 @@ const INITIAL_ALERTS = [
     id: "3",
     severity: "warning",
     source: "platform",
-    message: "3 abandoned carts in last hour — Shopify recovery emails queued",
+    message:   "3 abandoned carts in last hour — Shopify recovery emails queued",
+    messageZh: "过去一小时内 3 个购物车被放弃 — Shopify 找回邮件已排队",
     project: "FurMates",
     projectColor: "#10B981",
     status: "new",
@@ -41,7 +44,8 @@ const INITIAL_ALERTS = [
     id: "4",
     severity: "info",
     source: "agent",
-    message: "NIW petition deadline in 3 days — document review required from Terry",
+    message:   "NIW petition deadline in 3 days — document review required from Terry",
+    messageZh: "NIW 申请截止还有 3 天 — 需要 Terry 审核文件",
     project: "NIW",
     projectColor: "#F59E0B",
     status: "new",
@@ -51,7 +55,8 @@ const INITIAL_ALERTS = [
     id: "5",
     severity: "info",
     source: "agent",
-    message: "wheatcoin SDK v2.1.0 docs published and community notified",
+    message:   "wheatcoin SDK v2.1.0 docs published and community notified",
+    messageZh: "wheatcoin SDK v2.1.0 文档已发布，社区已通知",
     project: "wheatcoin",
     projectColor: "#F97316",
     status: "resolved",
@@ -61,7 +66,8 @@ const INITIAL_ALERTS = [
     id: "6",
     severity: "critical",
     source: "system",
-    message: "Mobile checkout bug causing cart abandonment — requires developer attention",
+    message:   "Mobile checkout bug causing cart abandonment — requires developer attention",
+    messageZh: "移动端结账漏洞导致购物车放弃 — 需要开发者介入",
     project: "FurMates",
     projectColor: "#10B981",
     status: "new",
@@ -83,6 +89,13 @@ const statusStyles: Record<string, string> = {
 
 export default function AlertsPage() {
   const t = useT();
+  const { locale } = useLocale();
+  const isZh = locale === "zh";
+  const sourceLabel: Record<string, string> = {
+    platform: "平台",
+    system:   "系统",
+    agent:    "智能体",
+  };
   const [alerts, setAlerts] = useState(INITIAL_ALERTS);
   const [filter, setFilter] = useState("all");
 
@@ -173,7 +186,9 @@ export default function AlertsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-sm text-white mb-1">{alert.message}</div>
+                        <div className="text-sm text-white mb-1">
+                          {isZh ? (alert.messageZh ?? alert.message) : alert.message}
+                        </div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span
                             className="text-xs px-1.5 py-0.5 rounded font-medium"
@@ -184,7 +199,7 @@ export default function AlertsPage() {
                           >
                             {alert.project}
                           </span>
-                          <span className="text-xs text-[#5A5A6E]">{alert.source}</span>
+                          <span className="text-xs text-[#5A5A6E]">{isZh ? (sourceLabel[alert.source] ?? alert.source) : alert.source}</span>
                           <span className="text-xs text-[#5A5A6E]">·</span>
                           <span className="text-xs text-[#5A5A6E]">{alert.time}</span>
                           <span className={cn("text-xs px-1.5 py-0.5 rounded ml-auto", statusStyles[alert.status])}>
