@@ -305,6 +305,28 @@ const zh = {
   settingsArchive:     '归档',
   settingsAIProvider:  'AI Provider',
   settingsAIAgents:    'Agents',
+
+  // Insight type / severity / status labels
+  insightTypeTrend:       '趋势',
+  insightTypeAnomaly:     '异常',
+  insightTypeOpportunity: '机会',
+  insightTypeRisk:        '风险',
+  severityCritical:       '严重',
+  severityHigh:           '高',
+  severityMedium:         '中',
+  severityLow:            '低',
+  insightStatusNew:       '待处理',
+  insightStatusPlanned:   '已计划',
+  insightStatusDismissed: '已忽略',
+  insightStatusResolved:  '已解决',
+  planStatusPending:      '待审批',
+  planStatusApproved:     '已批准',
+  planStatusRejected:     '已拒绝',
+  planStatusExecuting:    '执行中',
+  planStatusSucceeded:    '已完成',
+  planStatusFailed:       '失败',
+  insightPlanGenerated2:  '计划生成成功',
+  insightPlanGenFailed:   '计划生成失败',
 };
 
 // ── en dictionary (must match zh shape exactly) ────────────────────────────
@@ -595,6 +617,27 @@ const en: typeof zh = {
   settingsArchive:     'Archive',
   settingsAIProvider:  'AI Provider',
   settingsAIAgents:    'Agents',
+
+  insightTypeTrend:       'Trend',
+  insightTypeAnomaly:     'Anomaly',
+  insightTypeOpportunity: 'Opportunity',
+  insightTypeRisk:        'Risk',
+  severityCritical:       'Critical',
+  severityHigh:           'High',
+  severityMedium:         'Medium',
+  severityLow:            'Low',
+  insightStatusNew:       'New',
+  insightStatusPlanned:   'Planned',
+  insightStatusDismissed: 'Dismissed',
+  insightStatusResolved:  'Resolved',
+  planStatusPending:      'Pending',
+  planStatusApproved:     'Approved',
+  planStatusRejected:     'Rejected',
+  planStatusExecuting:    'Executing',
+  planStatusSucceeded:    'Succeeded',
+  planStatusFailed:       'Failed',
+  insightPlanGenerated2:  'Plan generated',
+  insightPlanGenFailed:   'Failed to generate plan',
 };
 
 const dict = { zh, en } as const;

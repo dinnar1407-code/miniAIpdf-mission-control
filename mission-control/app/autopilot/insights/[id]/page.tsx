@@ -147,6 +147,12 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
   const router = useRouter();
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const planStatusLabel = (s: string) => (({
+    pending: t.planStatusPending, approved: t.planStatusApproved,
+    rejected: t.planStatusRejected, executing: t.planStatusExecuting,
+    succeeded: t.planStatusSucceeded, failed: t.planStatusFailed,
+  } as Record<string, string>)[s] ?? s);
+
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/autopilot/plans/generate", {
@@ -155,16 +161,16 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
         body:    JSON.stringify({ insightId: insight.id }),
       });
       const data = await res.json() as { plan?: { id: string }; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to generate plan");
+      if (!res.ok) throw new Error(data.error ?? t.insightPlanGenFailed);
       return data as { plan: { id: string } };
     },
     onSuccess: (data) => {
-      setToast({ msg: "Plan generated", type: "success" });
+      setToast({ msg: t.insightPlanGenerated2, type: "success" });
       setTimeout(() => router.push(`/autopilot/plans/${data.plan.id}`), 800);
       onGenerated();
     },
     onError: (err) => {
-      setToast({ msg: err instanceof Error ? err.message : "Failed to generate plan", type: "error" });
+      setToast({ msg: err instanceof Error ? err.message : t.insightPlanGenFailed, type: "error" });
     },
   });
 
@@ -201,7 +207,7 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
                 className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full text-white capitalize"
                 style={{ backgroundColor: PLAN_STATUS_COLOR[plan.status] ?? "#6B7280" }}
               >
-                {plan.status}
+                {planStatusLabel(plan.status)}
               </span>
               <ChevronRight className="w-3 h-3 text-[#555566]" />
             </div>
@@ -230,6 +236,21 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
 export default function InsightDetailPage() {
   const t = useT();
   const { id } = useParams<{ id: string }>();
+
+  const insightTypeLabel = (tp: string) => (({
+    trend: t.insightTypeTrend, anomaly: t.insightTypeAnomaly,
+    opportunity: t.insightTypeOpportunity, risk: t.insightTypeRisk,
+  } as Record<string, string>)[tp] ?? tp);
+
+  const insightSeverityLabel = (s: string) => (({
+    critical: t.severityCritical, high: t.severityHigh,
+    medium: t.severityMedium, low: t.severityLow,
+  } as Record<string, string>)[s] ?? s);
+
+  const insightStatusLabel = (s: string) => (({
+    new: t.insightStatusNew, planned: t.insightStatusPlanned,
+    dismissed: t.insightStatusDismissed, resolved: t.insightStatusResolved,
+  } as Record<string, string>)[s] ?? s);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["insight", id],
@@ -286,16 +307,16 @@ export default function InsightDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-[#1E1E2E] text-[#8B8B9E] capitalize">
                   {TYPE_ICONS[insight.type] ?? <AlertTriangle className="w-3.5 h-3.5" />}
-                  {insight.type}
+                  {insightTypeLabel(insight.type)}
                 </span>
                 <span
                   className="text-xs font-semibold px-2.5 py-1 rounded-full text-white capitalize"
                   style={{ backgroundColor: severityColor }}
                 >
-                  {insight.severity}
+                  {insightSeverityLabel(insight.severity)}
                 </span>
                 <span className="text-xs px-2.5 py-1 rounded-full bg-[#1E1E2E] text-[#8B8B9E] capitalize ml-auto">
-                  {insight.status}
+                  {insightStatusLabel(insight.status)}
                 </span>
               </div>
               <h1 className="text-base font-semibold text-white leading-snug">
