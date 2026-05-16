@@ -9,8 +9,11 @@ interface InsightDraft {
   type: InsightType;
   severity: Severity;
   title: string;
+  titleZh?: string;
   summary: string;
+  summaryZh?: string;
   suggestedAction: string | null;
+  suggestedActionZh?: string | null;
 }
 
 export interface InsightGeneratorResult {
@@ -21,15 +24,18 @@ export interface InsightGeneratorResult {
 }
 
 const SYSTEM_PROMPT = `You are an AI analyst for a multi-project operations dashboard.
-Given a metric observation, classify it and generate a concise insight.
+Given a metric observation, classify it and generate a bilingual insight (English + Chinese).
 
 Respond with valid JSON only, no markdown fences:
 {
   "type": "anomaly" | "opportunity" | "risk" | "trend" | "milestone",
   "severity": "low" | "medium" | "high" | "critical",
-  "title": "short title under 80 characters",
-  "summary": "2-3 sentences explaining what the data shows and why it matters",
-  "suggestedAction": "a concrete recommended action, or null"
+  "title": "short English title under 80 characters",
+  "titleZh": "简短中文标题，不超过30字",
+  "summary": "2-3 sentences in English explaining what the data shows and why it matters",
+  "summaryZh": "2-3句中文，解释数据含义和影响",
+  "suggestedAction": "a concrete recommended action in English, or null",
+  "suggestedActionZh": "具体的中文建议行动，或null"
 }`;
 
 function buildUserPrompt(obs: RawObservation): string {
@@ -70,11 +76,14 @@ function parseDraft(raw: string): InsightDraft | null {
       return null;
     }
     return {
-      type: json.type as InsightType,
-      severity: json.severity as Severity,
-      title: String(json.title).slice(0, 80),
-      summary: String(json.summary),
-      suggestedAction: json.suggestedAction ? String(json.suggestedAction) : null,
+      type:               json.type as InsightType,
+      severity:           json.severity as Severity,
+      title:              String(json.title).slice(0, 80),
+      titleZh:            json.titleZh ? String(json.titleZh).slice(0, 60) : undefined,
+      summary:            String(json.summary),
+      summaryZh:          json.summaryZh ? String(json.summaryZh) : undefined,
+      suggestedAction:    json.suggestedAction ? String(json.suggestedAction) : null,
+      suggestedActionZh:  json.suggestedActionZh ? String(json.suggestedActionZh) : null,
     };
   } catch {
     return null;
@@ -116,7 +125,7 @@ export async function generateInsights(
         task: "observe",
         systemPrompt: SYSTEM_PROMPT,
         userPrompt: buildUserPrompt(obs),
-        maxTokens: 300,
+        maxTokens: 600,
         temperature: 0.2,
         projectId: obs.projectId,
       });
@@ -138,16 +147,19 @@ export async function generateInsights(
 
       const created = await prisma.insight.create({
         data: {
-          projectId:       obs.projectId,
-          goalId:          obs.goalId,
-          type:            draft.type,
-          severity:        draft.severity,
-          title:           draft.title,
-          summary:         draft.summary,
-          evidence:        obs as object,
-          suggestedAction: draft.suggestedAction,
-          status:          "new",
-          observedAt:      new Date(obs.observedAt),
+          projectId:        obs.projectId,
+          goalId:           obs.goalId,
+          type:             draft.type,
+          severity:         draft.severity,
+          title:            draft.title,
+          titleZh:          draft.titleZh,
+          summary:          draft.summary,
+          summaryZh:        draft.summaryZh,
+          evidence:         obs as object,
+          suggestedAction:  draft.suggestedAction,
+          suggestedActionZh: draft.suggestedActionZh,
+          status:           "new",
+          observedAt:       new Date(obs.observedAt),
         },
       });
 

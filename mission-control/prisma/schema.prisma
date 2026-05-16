@@ -321,9 +321,12 @@ model Insight {
   type            InsightType
   severity        Severity
   title           String
+  titleZh         String?
   summary         String      @db.Text
+  summaryZh       String?     @db.Text
   evidence        Json
-  suggestedAction String?     @db.Text
+  suggestedAction   String? @db.Text
+  suggestedActionZh String? @db.Text
 
   status InsightStatus @default(new)
 

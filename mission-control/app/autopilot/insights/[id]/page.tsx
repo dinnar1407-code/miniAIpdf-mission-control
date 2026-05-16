@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
-import { useT } from "@/lib/i18n";
+import { useT, useLocale } from "@/lib/i18n";
 import {
   AlertTriangle, TrendingUp, Zap, Trophy,
   Lightbulb, ArrowLeft, ChevronRight, TrendingDown, Loader2,
@@ -30,9 +30,12 @@ interface InsightDetail {
   type: string;
   severity: string;
   title: string;
+  titleZh?: string | null;
   summary: string;
+  summaryZh?: string | null;
   evidence: Evidence;
   suggestedAction: string | null;
+  suggestedActionZh?: string | null;
   status: string;
   observedAt: string;
   createdAt: string;
@@ -235,6 +238,7 @@ function PlanCard({ insight, onGenerated }: { insight: InsightDetail; onGenerate
 // ── 主页 ────────────────────────────────────────────────────────
 export default function InsightDetailPage() {
   const t = useT();
+  const { locale } = useLocale();
   const { id } = useParams<{ id: string }>();
 
   const insightTypeLabel = (tp: string) => (({
@@ -262,8 +266,12 @@ export default function InsightDetailPage() {
   });
 
   const insight = data?.insight;
-  const severityColor = SEVERITY_COLOR[insight?.severity ?? ""] ?? "#6B7280";
-  const severityBorder = SEVERITY_BG[insight?.severity ?? ""]   ?? "border-gray-500/20";
+  const isZh = locale === "zh";
+  const displayTitle   = insight ? (isZh ? (insight.titleZh ?? insight.title) : insight.title) : undefined;
+  const displaySummary = insight ? (isZh ? (insight.summaryZh ?? insight.summary) : insight.summary) : undefined;
+  const displayAction  = insight ? (isZh ? (insight.suggestedActionZh ?? insight.suggestedAction) : insight.suggestedAction) : undefined;
+  const severityColor  = SEVERITY_COLOR[insight?.severity ?? ""] ?? "#6B7280";
+  const severityBorder = SEVERITY_BG[insight?.severity ?? ""]    ?? "border-gray-500/20";
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
@@ -320,22 +328,22 @@ export default function InsightDetailPage() {
                 </span>
               </div>
               <h1 className="text-base font-semibold text-white leading-snug">
-                {insight.title}
+                {displayTitle}
               </h1>
               <p className="text-sm text-[#8B8B9E] leading-relaxed">
-                {insight.summary}
+                {displaySummary}
               </p>
             </div>
 
             {/* Suggested action */}
-            {insight.suggestedAction && (
+            {displayAction && (
               <div className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 flex items-start gap-3">
                 <Lightbulb className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold text-[#8B8B9E] mb-1 uppercase tracking-wide">
                     {t.insightSuggestedAction}
                   </p>
-                  <p className="text-sm text-white leading-relaxed">{insight.suggestedAction}</p>
+                  <p className="text-sm text-white leading-relaxed">{displayAction}</p>
                 </div>
               </div>
             )}

@@ -3,18 +3,21 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
-import { useT } from "@/lib/i18n";
+import { useT, useLocale } from "@/lib/i18n";
 import { AlertTriangle, TrendingUp, Zap, Target, Flag, Lightbulb } from "lucide-react";
 
 // ── 类型 ────────────────────────────────────────────────────────
 interface InsightRow {
   id: string;
   title: string;
+  titleZh?: string | null;
   summary: string;
+  summaryZh?: string | null;
   type: string;
   severity: string;
   status: string;
   suggestedAction: string | null;
+  suggestedActionZh?: string | null;
   observedAt: string;
   createdAt: string;
   project: { name: string; emoji: string; color: string } | null;
@@ -76,6 +79,12 @@ function FilterChips({
 }
 
 function InsightCard({ insight }: { insight: InsightRow }) {
+  const { locale } = useLocale();
+  const isZh = locale === "zh";
+  const title           = isZh ? (insight.titleZh ?? insight.title) : insight.title;
+  const summary         = isZh ? (insight.summaryZh ?? insight.summary) : insight.summary;
+  const suggestedAction = isZh ? (insight.suggestedActionZh ?? insight.suggestedAction) : insight.suggestedAction;
+
   const severityColor = SEVERITY_COLORS[insight.severity] ?? "#6366F1";
   const icon          = TYPE_ICONS[insight.type] ?? <AlertTriangle className="w-3 h-3" />;
   const ago           = new Date(insight.observedAt).toLocaleDateString("zh-CN", {
@@ -110,13 +119,13 @@ function InsightCard({ insight }: { insight: InsightRow }) {
         </div>
       </div>
 
-      <p className="text-sm font-semibold text-white mb-1">{insight.title}</p>
-      <p className="text-xs text-[#8B8B9E] leading-relaxed mb-3">{insight.summary}</p>
+      <p className="text-sm font-semibold text-white mb-1">{title}</p>
+      <p className="text-xs text-[#8B8B9E] leading-relaxed mb-3">{summary}</p>
 
-      {insight.suggestedAction && (
+      {suggestedAction && (
         <div className="flex items-start gap-1.5 bg-[#1A1A28] rounded-lg px-3 py-2 mb-3">
           <Lightbulb className="w-3 h-3 text-yellow-400 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-[#C0C0D0]">{insight.suggestedAction}</p>
+          <p className="text-xs text-[#C0C0D0]">{suggestedAction}</p>
         </div>
       )}
 
