@@ -4,17 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, CheckSquare, Bot, Calendar, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const mobileNavItems = [
-  { href: "/dashboard",  label: "Home",      icon: LayoutDashboard },
-  { href: "/tasks",      label: "Tasks",     icon: CheckSquare },
-  { href: "/content",    label: "Content",   icon: Calendar },
-  { href: "/agents",     label: "Agents",    icon: Bot },
-  { href: "/autopilot",  label: "Autopilot", icon: Cpu },
-];
+import { useT } from "@/lib/i18n";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const t = useT();
+
+  const mobileNavItems = [
+    { href: "/dashboard",  label: t.navHome,      icon: LayoutDashboard },
+    { href: "/tasks",      label: t.navTasks,     icon: CheckSquare },
+    { href: "/content",    label: t.navContent,   icon: Calendar },
+    { href: "/agents",     label: t.navAgents,    icon: Bot },
+    { href: "/autopilot",  label: t.navAutopilot, icon: Cpu },
+  ];
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#0A0A0F]/95 backdrop-blur-md border-t border-[#2A2A3A] z-50">

@@ -14,6 +14,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 const projects = [
   { name: "MiniAIPDF", slug: "miniaipdf", emoji: "📄", color: "#3B82F6" },
@@ -24,20 +25,21 @@ const projects = [
   { name: "Dinnar", slug: "dinnar", emoji: "🏭", color: "#EF4444" },
 ];
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare },
-  { href: "/content", label: "Content", icon: Calendar },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/workflows",       label: "Workflows", icon: Workflow },
-  { href: "/autopilot",       label: "Autopilot", icon: Cpu      },
-  { href: "/settings",        label: "Settings",  icon: Settings },
-];
-
 export function Sidebar() {
   const pathname = usePathname();
+  const t = useT();
+
+  const navItems = [
+    { href: "/dashboard", label: t.navDashboard, icon: LayoutDashboard },
+    { href: "/tasks",     label: t.navTasks,     icon: CheckSquare },
+    { href: "/content",   label: t.navContent,   icon: Calendar },
+    { href: "/analytics", label: t.navAnalytics, icon: BarChart3 },
+    { href: "/agents",    label: t.navAgents,    icon: Bot },
+    { href: "/alerts",    label: t.navAlerts,    icon: Bell },
+    { href: "/workflows", label: t.navWorkflows, icon: Workflow },
+    { href: "/autopilot", label: t.navAutopilot, icon: Cpu },
+    { href: "/settings",  label: t.navSettings,  icon: Settings },
+  ];
 
   return (
     <aside className="hidden md:flex flex-col w-[240px] bg-[#0A0A0F] border-r border-[#2A2A3A] h-screen flex-shrink-0">
@@ -84,7 +86,7 @@ export function Sidebar() {
         {/* Projects */}
         <div className="pt-4">
           <div className="px-3 py-1 text-xs font-medium text-[#5A5A6E] uppercase tracking-wider mb-1">
-            Projects
+            {t.navProjects}
           </div>
           {projects.map((project) => (
             <Link
@@ -105,7 +107,7 @@ export function Sidebar() {
 
       {/* Agent Status (compact) */}
       <div className="p-3 border-t border-[#2A2A3A]">
-        <div className="text-xs text-[#5A5A6E] mb-2">Agent Status</div>
+        <div className="text-xs text-[#5A5A6E] mb-2">{t.navAgentStatus}</div>
         <div className="space-y-1.5">
           {[
             { name: "Playfish", status: "active", emoji: "🌾" },

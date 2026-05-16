@@ -34,6 +34,20 @@ const zh = {
     return `${Math.floor(h / 24)}天前`;
   },
 
+  // Navigation
+  navDashboard:  '仪表盘',
+  navTasks:      '任务',
+  navContent:    '内容',
+  navAnalytics:  '分析',
+  navAgents:     '智能体',
+  navAlerts:     '告警',
+  navWorkflows:  'Workflows',
+  navAutopilot:  '自动驾驶',
+  navSettings:   '设置',
+  navProjects:   '项目',
+  navAgentStatus:'Agent 状态',
+  navHome:       '首页',
+
   // Login
   loginTitle:        'Mission Ctrl 登录',
   loginButton:       '登录',
@@ -269,6 +283,19 @@ const en: typeof zh = {
     if (h < 24) return `${h}h ago`;
     return `${Math.floor(h / 24)}d ago`;
   },
+
+  navDashboard:  'Dashboard',
+  navTasks:      'Tasks',
+  navContent:    'Content',
+  navAnalytics:  'Analytics',
+  navAgents:     'Agents',
+  navAlerts:     'Alerts',
+  navWorkflows:  'Workflows',
+  navAutopilot:  'Autopilot',
+  navSettings:   'Settings',
+  navProjects:   'Projects',
+  navAgentStatus:'Agent Status',
+  navHome:       'Home',
 
   loginTitle:        'Mission Ctrl Login',
   loginButton:       'Login',

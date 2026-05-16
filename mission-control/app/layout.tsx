@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Sidebar }   from "@/components/layout/sidebar";
-import { MobileNav } from "@/components/layout/mobile-nav";
-import { Providers }  from "@/components/providers";
+import { Sidebar }          from "@/components/layout/sidebar";
+import { MobileNav }        from "@/components/layout/mobile-nav";
+import { Providers }        from "@/components/providers";
+import { LanguageProvider } from "@/lib/i18n";
 
 export const viewport: Viewport = {
   themeColor: "#0A0A0F",
@@ -41,18 +42,20 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.webmanifest" />
       </head>
       <body className="bg-[#0A0A0F] text-white antialiased">
-        <div className="flex h-screen overflow-hidden">
-          {/* Desktop Sidebar */}
-          <Sidebar />
+        <LanguageProvider>
+          <div className="flex h-screen overflow-hidden">
+            {/* Desktop Sidebar */}
+            <Sidebar />
 
-          {/* Main Content */}
-          <main className="flex-1 overflow-y-auto">
-            <Providers>{children}</Providers>
-          </main>
-        </div>
+            {/* Main Content */}
+            <main className="flex-1 overflow-y-auto">
+              <Providers>{children}</Providers>
+            </main>
+          </div>
 
-        {/* Mobile Bottom Nav */}
-        <MobileNav />
+          {/* Mobile Bottom Nav */}
+          <MobileNav />
+        </LanguageProvider>
       </body>
     </html>
   );
