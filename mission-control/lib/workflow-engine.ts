@@ -45,6 +45,17 @@ async function executeStep(
     case "agent": {
       const agentId = step.agent || "playfish";
       const action  = step.action || "完成分配的任务";
+
+      // Refresh lastActiveAt so admin UI shows when this agent was last used
+      if (step.agent) {
+        await prisma.agent.updateMany({
+          where: { name: step.agent },
+          data:  { lastActiveAt: new Date() },
+        }).catch((e) => {
+          console.warn(`Failed to update lastActiveAt for agent ${step.agent}:`, e);
+        });
+      }
+
       await addLog(runId, index, step.type, `🤖 ${agentId} 正在思考...`, "info");
 
       const systemPrompt = getAgentPrompt(agentId);

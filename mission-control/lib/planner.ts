@@ -73,8 +73,9 @@ export async function planFromInsight(
   };
 
   // 7. Query available agents (active only; empty list is fine)
+  // Exclude idle/inactive agents so Planner doesn't assign steps to dormant agents
   const agentRows = await prisma.agent.findMany({
-    where:  { status: { not: "disabled" } },
+    where:  { status: 'active' },
     select: { id: true, name: true, type: true },
   });
   const availableAgents = agentRows.map((a) => ({
