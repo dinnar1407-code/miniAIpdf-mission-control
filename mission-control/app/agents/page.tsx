@@ -354,13 +354,12 @@ export default function AgentsPage() {
           </div>
         </div>
       </div>
+      {showNew && (
+        <NewAgentDialog
+          onSuccess={() => { setShowNew(false); fetchStats(); }}
+          onClose={() => setShowNew(false)}
+        />
+      )}
     </div>
-
-    {showNew && (
-      <NewAgentDialog
-        onSuccess={() => { setShowNew(false); fetchStats(); }}
-        onClose={() => setShowNew(false)}
-      />
-    )}
   );
 }
