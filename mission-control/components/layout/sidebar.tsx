@@ -13,7 +13,6 @@ import {
   Workflow,
   Cpu,
   FolderKanban,
-  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -41,7 +40,6 @@ export function Sidebar() {
     { href: "/workflows", label: t.navWorkflows, icon: Workflow },
     { href: "/autopilot",       label: t.navAutopilot, icon: Cpu },
     { href: "/admin/projects",  label: t.navAdmin,      icon: FolderKanban },
-    { href: "/admin/agents",   label: t.adminAgents,   icon: Users },
     { href: "/settings",       label: t.navSettings,   icon: Settings },
   ];
 

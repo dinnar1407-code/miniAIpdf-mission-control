@@ -3,7 +3,8 @@
 import { Header } from "@/components/layout/header";
 import { useT } from "@/lib/i18n";
 import { useState, useEffect, useCallback } from "react";
-import { Play, Pause, RefreshCw, Zap, Trash2 } from "lucide-react";
+import { Play, Pause, RefreshCw, Zap, Trash2, Plus } from "lucide-react";
+import NewAgentDialog from "@/components/admin/new-agent-dialog";
 import { cn } from "@/lib/utils";
 
 // 静态配置：emoji / 显示名 / 类型（DB 无 emoji，前端补充）
@@ -56,6 +57,7 @@ export default function AgentsPage() {
   const [loading,      setLoading]      = useState(true);
   const [toggling,     setToggling]     = useState<string | null>(null);
   const [deleting,     setDeleting]     = useState<string | null>(null);
+  const [showNew,      setShowNew]      = useState(false);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -98,9 +100,11 @@ export default function AgentsPage() {
     if (!confirm(`确定删除 Agent "${agent.name}"？此操作不可撤销。`)) return;
     setDeleting(agent.id);
     try {
-      await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
-      if (selected?.id === agent.id) setSelected(null);
-      await fetchStats();
+      const res = await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setAgents(prev => prev.filter(a => a.id !== agent.id));
+        if (selected?.id === agent.id) setSelected(null);
+      }
     } finally {
       setDeleting(null);
     }
@@ -128,6 +132,15 @@ export default function AgentsPage() {
               <div className="text-xs text-[#5A5A6E] mt-0.5">{stat.label}</div>
             </div>
           ))}
+        </div>
+
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowNew(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#3B82F6] hover:bg-[#2563EB] text-sm text-white font-medium transition-colors"
+          >
+            <Plus size={14} /> New Agent
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -342,5 +355,12 @@ export default function AgentsPage() {
         </div>
       </div>
     </div>
+
+    {showNew && (
+      <NewAgentDialog
+        onSuccess={() => { setShowNew(false); fetchStats(); }}
+        onClose={() => setShowNew(false)}
+      />
+    )}
   );
 }
