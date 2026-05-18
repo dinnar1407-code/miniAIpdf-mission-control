@@ -3,7 +3,7 @@
 import { Header } from "@/components/layout/header";
 import { useT } from "@/lib/i18n";
 import { useState, useEffect, useCallback } from "react";
-import { Play, Pause, RefreshCw, Zap } from "lucide-react";
+import { Play, Pause, RefreshCw, Zap, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // 静态配置：emoji / 显示名 / 类型（DB 无 emoji，前端补充）
@@ -13,6 +13,7 @@ const AGENT_META: Record<string, { emoji: string; displayType: string }> = {
   "pm01-b": { emoji: "📝", displayType: "Content Agent B" },
   admin01:  { emoji: "🔧", displayType: "Operations Agent" },
   dfm:      { emoji: "📊", displayType: "Data & Finance Agent" },
+  caishen:  { emoji: "💰", displayType: "Investment Agent" },
 };
 
 function getEmoji(name: string) {
@@ -54,6 +55,7 @@ export default function AgentsPage() {
   const [selected,     setSelected]     = useState<AgentData | null>(null);
   const [loading,      setLoading]      = useState(true);
   const [toggling,     setToggling]     = useState<string | null>(null);
+  const [deleting,     setDeleting]     = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -89,6 +91,18 @@ export default function AgentsPage() {
       await fetchStats();
     } finally {
       setToggling(null);
+    }
+  };
+
+  const deleteAgent = async (agent: AgentData) => {
+    if (!confirm(`确定删除 Agent "${agent.name}"？此操作不可撤销。`)) return;
+    setDeleting(agent.id);
+    try {
+      await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+      if (selected?.id === agent.id) setSelected(null);
+      await fetchStats();
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -175,17 +189,30 @@ export default function AgentsPage() {
                             <div className="text-xs text-[#8B8B9E]">{displayType}</div>
                           </div>
 
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleStatus(agent); }}
-                            disabled={isToggling}
-                            className="p-1.5 rounded-md bg-[#1A1A24] hover:bg-[#2A2A3A] text-[#8B8B9E] hover:text-white transition-colors flex-shrink-0 disabled:opacity-50"
-                            title={agent.status === "active" ? t.agentsPause : t.agentsActivate}
-                          >
-                            {isToggling
-                              ? <RefreshCw size={13} className="animate-spin" />
-                              : agent.status === "active" ? <Pause size={13} /> : <Play size={13} />
-                            }
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleStatus(agent); }}
+                              disabled={isToggling}
+                              className="p-1.5 rounded-md bg-[#1A1A24] hover:bg-[#2A2A3A] text-[#8B8B9E] hover:text-white transition-colors flex-shrink-0 disabled:opacity-50"
+                              title={agent.status === "active" ? t.agentsPause : t.agentsActivate}
+                            >
+                              {isToggling
+                                ? <RefreshCw size={13} className="animate-spin" />
+                                : agent.status === "active" ? <Pause size={13} /> : <Play size={13} />
+                              }
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteAgent(agent); }}
+                              disabled={deleting === agent.id}
+                              className="p-1.5 rounded-md bg-[#1A1A24] hover:bg-[#3A1A1A] text-[#8B8B9E] hover:text-[#EF4444] transition-colors flex-shrink-0 disabled:opacity-50"
+                              title="删除 Agent"
+                            >
+                              {deleting === agent.id
+                                ? <RefreshCw size={13} className="animate-spin" />
+                                : <Trash2 size={13} />
+                              }
+                            </button>
+                          </div>
                         </div>
 
                         {/* 当前任务 */}

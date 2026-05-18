@@ -138,11 +138,17 @@ async function main() {
       update: {},
       create: {
         id: "agent-caishen",
-        name: "Caishen 财神",
-        type: "data",
+        name: "Caishen",
+        type: "investment",
         status: "active",
         currentTask: "财务数据分析",
-        config: JSON.stringify({ role: "数据分析", channel: "webchat" }),
+        config: JSON.stringify({
+          emoji: "💰",
+          role: "Investment Agent",
+          channel: "telegram",
+          telegramBotToken: process.env.CAISHEN_TELEGRAM_BOT_TOKEN,
+          telegramChatId: process.env.CAISHEN_TELEGRAM_CHAT_ID,
+        }),
       },
     }),
   ]);
