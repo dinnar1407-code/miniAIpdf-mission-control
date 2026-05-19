@@ -40,9 +40,10 @@ const CHANNEL_FIELDS: Record<string, { key: string; label: string; placeholder: 
     { key: "channelId",  label: "Channel ID",  placeholder: "-100xxxxxxxxxx" },
   ],
   twitter: [
-    { key: "bearerToken",    label: "Bearer Token",    placeholder: "AAAA...", secret: true },
-    { key: "accessToken",    label: "Access Token",    placeholder: "...", secret: true },
-    { key: "accessSecret",   label: "Access Secret",   placeholder: "...", secret: true },
+    { key: "apiKey",         label: "API Key (Consumer Key)",     placeholder: "xQeGQbc0...", secret: true },
+    { key: "apiSecret",      label: "API Secret (Consumer Secret)", placeholder: "DSiaWzhK...", secret: true },
+    { key: "accessToken",    label: "Access Token",               placeholder: "202292569...", secret: true },
+    { key: "accessSecret",   label: "Access Secret",              placeholder: "TCV2nnw...", secret: true },
   ],
   linkedin: [
     { key: "accessToken", label: "Access Token", placeholder: "AQX...", secret: true },
