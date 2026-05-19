@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { WorkflowData } from "@/lib/workflow-types";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 // Mock data for demo
 const MOCK_WORKFLOWS: Record<string, Partial<WorkflowData>> = {
@@ -53,6 +54,7 @@ const MOCK_WORKFLOWS: Record<string, Partial<WorkflowData>> = {
 };
 
 export default function WorkflowDetailPage({ params }: { params: { id: string } }) {
+  const t = useT();
   const router = useRouter();
   const [workflow, setWorkflow] = useState<Partial<WorkflowData> | null>(null);
 
@@ -99,7 +101,7 @@ export default function WorkflowDetailPage({ params }: { params: { id: string } 
   if (!workflow) {
     return (
       <div className="min-h-screen bg-[#0A0A0F] flex items-center justify-center">
-        <div className="text-[#5A5A6E] text-sm">Loading…</div>
+        <div className="text-[#5A5A6E] text-sm">{t.loading}</div>
       </div>
     );
   }
@@ -107,10 +109,10 @@ export default function WorkflowDetailPage({ params }: { params: { id: string } 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
-        title={workflow.name || "Workflow"}
+        title={workflow.name || t.navWorkflows}
         subtitle={
           <span className="flex items-center gap-1 text-sm text-[#8B8B9E]">
-            <Link href="/workflows" className="hover:text-white transition-colors">Workflows</Link>
+            <Link href="/workflows" className="hover:text-white transition-colors">{t.navWorkflows}</Link>
             <ChevronRight size={13} />
             <span>{workflow.name}</span>
           </span>

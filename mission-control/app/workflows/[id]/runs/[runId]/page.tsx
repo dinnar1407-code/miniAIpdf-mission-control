@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, CheckCircle, XCircle, Clock, Loader2, Circle } from "lucide-react";
@@ -69,8 +70,9 @@ function formatDuration(start: string | null, end: string | null) {
 }
 
 export default function RunDetailPage({ params }: { params: { id: string; runId: string } }) {
+  const t = useT();
   const [run, setRun] = useState<RunDetail | null>(null);
-  const [workflowName, setWorkflowName] = useState("Workflow");
+  const [workflowName, setWorkflowName] = useState("");
   const logBottomRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -81,22 +83,18 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
 
   useEffect(() => {
     fetch(`/api/workflows/${params.id}`).then(r => r.ok ? r.json() : null).then(d => {
-      if (d) setWorkflowName(d.name || "Workflow");
+      if (d) setWorkflowName(d.name || "");
     });
   }, [params.id]);
 
-  useEffect(() => {
-    fetchRun();
-  }, [params.runId]);
+  useEffect(() => { fetchRun(); }, [params.runId]);
 
-  // Poll while running
   useEffect(() => {
     if (!run || run.status !== "running") return;
     const interval = setInterval(fetchRun, 1500);
     return () => clearInterval(interval);
   }, [run?.status]);
 
-  // Auto-scroll logs
   useEffect(() => {
     if (autoScroll && logBottomRef.current) {
       logBottomRef.current.scrollIntoView({ behavior: "smooth" });
@@ -104,9 +102,8 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
   }, [run?.logs?.length, autoScroll]);
 
   const stepResults: StepResult[] = (() => {
-    try {
-      return run ? JSON.parse(run.stepResults) : [];
-    } catch { return []; }
+    try { return run ? JSON.parse(run.stepResults) : []; }
+    catch { return []; }
   })();
 
   const overallStatus = run?.status || "pending";
@@ -116,6 +113,13 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
     failed:    "text-red-400",
     pending:   "text-[#8B8B9E]",
   }[overallStatus] || "text-[#8B8B9E]";
+
+  const statusDisplayLabel = ({
+    running:   t.wfStatusRunning,
+    completed: t.wfStatusCompleted,
+    failed:    t.wfStatusFailed,
+    pending:   t.wfStatusPending,
+  } as Record<string, string>)[overallStatus] || overallStatus;
 
   if (!run) {
     return (
@@ -128,14 +132,14 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
-        title="Run Detail"
+        title={t.wfRunDetail}
         subtitle={
           <span className="flex items-center gap-1 text-sm text-[#8B8B9E]">
-            <Link href="/workflows" className="hover:text-white transition-colors">Workflows</Link>
+            <Link href="/workflows" className="hover:text-white transition-colors">{t.navWorkflows}</Link>
             <ChevronRight size={13} />
-            <Link href={`/workflows/${params.id}`} className="hover:text-white transition-colors">{workflowName}</Link>
+            <Link href={`/workflows/${params.id}`} className="hover:text-white transition-colors">{workflowName || t.navWorkflows}</Link>
             <ChevronRight size={13} />
-            <Link href={`/workflows/${params.id}/runs`} className="hover:text-white transition-colors">Runs</Link>
+            <Link href={`/workflows/${params.id}/runs`} className="hover:text-white transition-colors">{t.wfRunsLink}</Link>
             <ChevronRight size={13} />
             <span className="font-mono text-xs">{params.runId.slice(0, 8)}…</span>
           </span>
@@ -148,18 +152,18 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                {overallStatus === "running" && <Loader2 size={16} className="text-blue-400 animate-spin" />}
+                {overallStatus === "running"   && <Loader2 size={16} className="text-blue-400 animate-spin" />}
                 {overallStatus === "completed" && <CheckCircle size={16} className="text-green-400" />}
-                {overallStatus === "failed" && <XCircle size={16} className="text-red-400" />}
-                {overallStatus === "pending" && <Clock size={16} className="text-[#8B8B9E]" />}
-                <span className={cn("text-lg font-semibold capitalize", statusColor)}>{overallStatus}</span>
+                {overallStatus === "failed"    && <XCircle size={16} className="text-red-400" />}
+                {overallStatus === "pending"   && <Clock size={16} className="text-[#8B8B9E]" />}
+                <span className={cn("text-lg font-semibold", statusColor)}>{statusDisplayLabel}</span>
               </div>
               <p className="text-[#8B8B9E] text-sm font-mono">{run.id}</p>
             </div>
             <div className="text-right text-sm text-[#8B8B9E] space-y-1">
-              <div>Started: {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</div>
-              <div>Duration: {formatDuration(run.startedAt || run.createdAt, run.completedAt)}</div>
-              <div>Steps: {run.currentStep} / {run.totalSteps}</div>
+              <div>{t.wfRunStarted}{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</div>
+              <div>{t.wfRunDuration}{formatDuration(run.startedAt || run.createdAt, run.completedAt)}</div>
+              <div>{t.wfRunSteps}{run.currentStep} / {run.totalSteps}</div>
             </div>
           </div>
 
@@ -169,7 +173,6 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
             </div>
           )}
 
-          {/* Step progress bar */}
           <div className="mt-5">
             <div className="flex gap-1.5">
               {stepResults.map((step, i) => (
@@ -191,9 +194,9 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           {/* Step tracker */}
           <div className="lg:col-span-2 space-y-2">
-            <h3 className="text-[#E0E0F0] font-medium text-sm mb-3">Steps</h3>
+            <h3 className="text-[#E0E0F0] font-medium text-sm mb-3">{t.wfStepsSection}</h3>
             {stepResults.length === 0 && (
-              <p className="text-[#5A5A6E] text-sm">No steps recorded</p>
+              <p className="text-[#5A5A6E] text-sm">{t.wfNoSteps}</p>
             )}
             {stepResults.map((step, i) => (
               <div
@@ -208,7 +211,7 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
               >
                 <StepIcon status={step.status} />
                 <div className="min-w-0">
-                  <div className="text-[#E0E0F0] text-xs font-medium">Step {i + 1}</div>
+                  <div className="text-[#E0E0F0] text-xs font-medium">{t.wfStepN(i + 1)}</div>
                   {step.output && <div className="text-[#8B8B9E] text-xs mt-0.5 truncate">{step.output}</div>}
                   {step.error  && <div className="text-red-400 text-xs mt-0.5 truncate">{step.error}</div>}
                   {(step.startedAt || step.completedAt) && (
@@ -224,7 +227,7 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
           {/* Log viewer */}
           <div className="lg:col-span-3 flex flex-col">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-[#E0E0F0] font-medium text-sm">Execution Logs</h3>
+              <h3 className="text-[#E0E0F0] font-medium text-sm">{t.wfExecLogs}</h3>
               <label className="flex items-center gap-2 text-xs text-[#8B8B9E] cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -232,12 +235,12 @@ export default function RunDetailPage({ params }: { params: { id: string; runId:
                   onChange={e => setAutoScroll(e.target.checked)}
                   className="w-3 h-3"
                 />
-                Auto-scroll
+                {t.wfAutoScroll}
               </label>
             </div>
             <div className="bg-[#08080E] border border-[#2A2A3A] rounded-xl p-4 h-96 overflow-y-auto font-mono text-xs space-y-1">
               {run.logs.length === 0 && (
-                <span className="text-[#5A5A6E]">No logs yet…</span>
+                <span className="text-[#5A5A6E]">{t.wfNoLogs}</span>
               )}
               {run.logs.map((log) => (
                 <div key={log.id} className="flex gap-2">

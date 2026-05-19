@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import { Play, Plus, Edit2, ChevronRight, Loader2, Clock, CheckCircle, XCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,11 +46,12 @@ function RunStatusIcon({ status }: { status: string }) {
 }
 
 export default function WorkflowsPage() {
+  const t = useT();
   const router = useRouter();
-  const [workflows, setWorkflows]       = useState<Workflow[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [runningId, setRunningId]       = useState<string | null>(null);
-  const [deletingId, setDeletingId]     = useState<string | null>(null);
+  const [workflows, setWorkflows]         = useState<Workflow[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [runningId, setRunningId]         = useState<string | null>(null);
+  const [deletingId, setDeletingId]       = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -89,14 +91,9 @@ export default function WorkflowsPage() {
     setDeletingId(id);
     try {
       const res = await fetch(`/api/workflows/${id}`, { method: "DELETE" });
-      if (res.ok) {
-        setWorkflows(prev => prev.filter(w => w.id !== id));
-      }
+      if (res.ok) setWorkflows(prev => prev.filter(w => w.id !== id));
     } catch {}
-    finally {
-      setDeletingId(null);
-      setConfirmDelete(null);
-    }
+    finally { setDeletingId(null); setConfirmDelete(null); }
   };
 
   const stepCount = (wf: Workflow) => {
@@ -104,7 +101,7 @@ export default function WorkflowsPage() {
   };
 
   const lastRun = (wf: Workflow) => {
-    if (!wf.runs?.length) return "Never";
+    if (!wf.runs?.length) return t.wfNeverRun;
     return new Date(wf.runs[0].createdAt).toLocaleDateString();
   };
 
@@ -120,17 +117,17 @@ export default function WorkflowsPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
-      <Header title="Workflows" subtitle="Automation engine · J.A.R.V.I.S. protocols" />
+      <Header title={t.navWorkflows} subtitle={t.wfSubtitle} />
 
       <div className="p-4 md:p-6 space-y-4">
 
-        {/* Stats grid — 2×2 on mobile, 4×1 on desktop */}
+        {/* Stats grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
           {[
-            { label: "Active",     count: activeCount,      color: "#10B981" },
-            { label: "Draft",      count: draftCount,       color: "#8B8B9E" },
-            { label: "Total Runs", count: totalRuns,        color: "#3B82F6" },
-            { label: "Workflows",  count: workflows.length, color: "#8B5CF6" },
+            { label: t.wfStatActive,    count: activeCount,      color: "#10B981" },
+            { label: t.wfStatDraft,     count: draftCount,       color: "#8B8B9E" },
+            { label: t.wfStatTotalRuns, count: totalRuns,        color: "#3B82F6" },
+            { label: t.wfStatCount,     count: workflows.length, color: "#8B5CF6" },
           ].map(s => (
             <div key={s.label} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-3 text-center">
               <div className="text-xl font-bold" style={{ color: s.color }}>{s.count}</div>
@@ -139,40 +136,39 @@ export default function WorkflowsPage() {
           ))}
         </div>
 
-        {/* New Workflow button — full width on mobile */}
+        {/* New Workflow button */}
         <button
           onClick={handleCreate}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-[#3B82F6] hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors"
         >
-          <Plus size={16} /> New Workflow
+          <Plus size={16} /> {t.wfNew}
         </button>
 
         {/* Workflow list */}
         {loading ? (
           <div className="flex items-center justify-center py-20 text-[#5A5A6E]">
-            <Loader2 size={18} className="animate-spin mr-2" /> Loading workflows…
+            <Loader2 size={18} className="animate-spin mr-2" /> {t.wfLoading}
           </div>
         ) : workflows.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-[#2A2A3A] rounded-xl">
-            <p className="text-[#8B8B9E] mb-3">No workflows yet</p>
+            <p className="text-[#8B8B9E] mb-3">{t.wfNone}</p>
             <button
               onClick={handleCreate}
               className="px-4 py-2 bg-[#3B82F6] hover:bg-blue-500 text-white text-sm rounded-lg transition-colors"
             >
-              Create your first workflow
+              {t.wfNoneHint}
             </button>
           </div>
         ) : (
           workflows.map((wf) => {
-            const cfg           = statusConfig[wf.status] || statusConfig.draft;
-            const isRunning     = runningId === wf.id;
-            const isDeleting    = deletingId === wf.id;
-            const isConfirming  = confirmDelete === wf.id;
+            const cfg          = statusConfig[wf.status] || statusConfig.draft;
+            const isRunning    = runningId === wf.id;
+            const isDeleting   = deletingId === wf.id;
+            const isConfirming = confirmDelete === wf.id;
             const lastRunStatus = wf.runs?.[0]?.status;
 
             return (
               <div key={wf.id} className="bg-[#12121A] border border-[#2A2A3A] rounded-xl p-4 hover:border-[#3A3A4A] transition-colors">
-                {/* Top row: name + status + trigger */}
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <span className="font-semibold text-white text-sm truncate max-w-[180px] sm:max-w-none">{wf.name}</span>
@@ -185,39 +181,36 @@ export default function WorkflowsPage() {
                   </div>
                 </div>
 
-                {/* Description — clamped to 2 lines */}
                 {wf.description && (
                   <div className="text-xs text-[#8B8B9E] mb-2 leading-relaxed line-clamp-2">{wf.description}</div>
                 )}
 
-                {/* Stats row */}
                 <div className="flex items-center gap-3 text-xs text-[#5A5A6E] flex-wrap mb-3">
-                  <span>⚡ {stepCount(wf)} steps</span>
+                  <span>⚡ {t.wfStepCount(stepCount(wf))}</span>
                   <span className="flex items-center gap-1">
                     {lastRunStatus && <RunStatusIcon status={lastRunStatus} />}
                     {lastRun(wf)}
                   </span>
                   <span>✅ {successRate(wf)}</span>
-                  <span>🔄 {wf.runs?.length || 0} runs</span>
+                  <span>🔄 {t.wfRunCount(wf.runs?.length || 0)}</span>
                 </div>
 
-                {/* Action buttons */}
                 {isConfirming ? (
                   <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                    <span className="text-xs text-red-400 flex-1">Delete &ldquo;{wf.name}&rdquo;?</span>
+                    <span className="text-xs text-red-400 flex-1">{t.wfDeleteConfirm(wf.name)}</span>
                     <button
                       onClick={() => handleDelete(wf.id)}
                       disabled={isDeleting}
                       className="text-xs px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors flex items-center gap-1"
                     >
                       {isDeleting ? <Loader2 size={10} className="animate-spin" /> : null}
-                      Delete
+                      {t.wfDelete}
                     </button>
                     <button
                       onClick={() => setConfirmDelete(null)}
                       className="text-xs px-2.5 py-1 bg-[#2A2A3A] hover:bg-[#3A3A4A] text-[#8B8B9E] rounded-md transition-colors"
                     >
-                      Cancel
+                      {t.cancel}
                     </button>
                   </div>
                 ) : (
@@ -226,13 +219,13 @@ export default function WorkflowsPage() {
                       href={`/workflows/${wf.id}`}
                       className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[#8B8B9E] hover:text-white hover:bg-[#1A1A24] transition-colors"
                     >
-                      <Edit2 size={12} /> Edit
+                      <Edit2 size={12} /> {t.wfEdit}
                     </Link>
                     <Link
                       href={`/workflows/${wf.id}/runs`}
                       className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-[#8B8B9E] hover:text-white hover:bg-[#1A1A24] transition-colors"
                     >
-                      Runs <ChevronRight size={12} />
+                      {t.wfRunsLink} <ChevronRight size={12} />
                     </Link>
                     <button
                       onClick={() => handleRun(wf)}
@@ -245,14 +238,12 @@ export default function WorkflowsPage() {
                       )}
                     >
                       {isRunning
-                        ? <><Loader2 size={11} className="animate-spin" /> Running…</>
-                        : <><Play size={11} /> Run</>}
+                        ? <><Loader2 size={11} className="animate-spin" /> {t.wfRunningLabel}</>
+                        : <><Play size={11} /> {t.wfRunLabel}</>}
                     </button>
-                    {/* Delete — push to right */}
                     <button
                       onClick={() => setConfirmDelete(wf.id)}
                       className="ml-auto flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-[#5A5A6E] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Delete workflow"
                     >
                       <Trash2 size={12} />
                     </button>

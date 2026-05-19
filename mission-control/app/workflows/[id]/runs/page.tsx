@@ -1,6 +1,7 @@
 "use client";
 
 import { Header } from "@/components/layout/header";
+import { useT } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Play, CheckCircle, XCircle, Clock, Loader2, RefreshCw } from "lucide-react";
@@ -18,17 +19,23 @@ interface RunRecord {
   createdAt: string;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { icon: React.ReactNode; label: string; cls: string }> = {
-    running:   { icon: <Loader2 size={12} className="animate-spin" />, label: "Running",   cls: "text-blue-400 bg-blue-400/10 border-blue-400/20" },
-    completed: { icon: <CheckCircle size={12} />,                      label: "Completed", cls: "text-green-400 bg-green-400/10 border-green-400/20" },
-    failed:    { icon: <XCircle size={12} />,                          label: "Failed",    cls: "text-red-400 bg-red-400/10 border-red-400/20" },
-    pending:   { icon: <Clock size={12} />,                            label: "Pending",   cls: "text-[#8B8B9E] bg-[#8B8B9E]/10 border-[#8B8B9E]/20" },
+function StatusBadge({ status, label }: { status: string; label: string }) {
+  const cls: Record<string, string> = {
+    running:   "text-blue-400 bg-blue-400/10 border-blue-400/20",
+    completed: "text-green-400 bg-green-400/10 border-green-400/20",
+    failed:    "text-red-400 bg-red-400/10 border-red-400/20",
+    pending:   "text-[#8B8B9E] bg-[#8B8B9E]/10 border-[#8B8B9E]/20",
   };
-  const s = map[status] || map.pending;
+  const icon: Record<string, React.ReactNode> = {
+    running:   <Loader2 size={12} className="animate-spin" />,
+    completed: <CheckCircle size={12} />,
+    failed:    <XCircle size={12} />,
+    pending:   <Clock size={12} />,
+  };
+  const s = status in cls ? status : "pending";
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium", s.cls)}>
-      {s.icon}{s.label}
+    <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs font-medium", cls[s])}>
+      {icon[s]}{label}
     </span>
   );
 }
@@ -49,9 +56,17 @@ function formatTime(t: string | null) {
 }
 
 export default function RunsPage({ params }: { params: { id: string } }) {
+  const t = useT();
   const [runs, setRuns] = useState<RunRecord[]>([]);
-  const [workflowName, setWorkflowName] = useState("Workflow");
+  const [workflowName, setWorkflowName] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const statusLabel = (status: string) => ({
+    running:   t.wfStatusRunning,
+    completed: t.wfStatusCompleted,
+    failed:    t.wfStatusFailed,
+    pending:   t.wfStatusPending,
+  }[status] ?? status);
 
   const fetchRuns = async () => {
     try {
@@ -62,7 +77,7 @@ export default function RunsPage({ params }: { params: { id: string } }) {
       if (runsRes.ok) setRuns(await runsRes.json());
       if (wfRes.ok) {
         const wf = await wfRes.json();
-        setWorkflowName(wf.name || "Workflow");
+        setWorkflowName(wf.name || "");
       }
     } finally {
       setLoading(false);
@@ -71,7 +86,6 @@ export default function RunsPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     fetchRuns();
-    // Poll every 3s if there are running runs
     const interval = setInterval(() => {
       setRuns(prev => {
         if (prev.some(r => r.status === "running")) fetchRuns();
@@ -83,69 +97,63 @@ export default function RunsPage({ params }: { params: { id: string } }) {
 
   const handleRun = async () => {
     const res = await fetch(`/api/workflows/${params.id}/run`, { method: "POST" });
-    if (res.ok) {
-      await fetchRuns();
-    }
+    if (res.ok) await fetchRuns();
   };
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] pb-20 md:pb-0">
       <Header
-        title="Run History"
+        title={t.wfRunHistory}
         subtitle={
           <span className="flex items-center gap-1 text-sm text-[#8B8B9E]">
-            <Link href="/workflows" className="hover:text-white transition-colors">Workflows</Link>
+            <Link href="/workflows" className="hover:text-white transition-colors">{t.navWorkflows}</Link>
             <ChevronRight size={13} />
-            <Link href={`/workflows/${params.id}`} className="hover:text-white transition-colors">{workflowName}</Link>
+            <Link href={`/workflows/${params.id}`} className="hover:text-white transition-colors">{workflowName || t.navWorkflows}</Link>
             <ChevronRight size={13} />
-            <span>Runs</span>
+            <span>{t.wfRunsLink}</span>
           </span>
         }
       />
 
       <div className="p-6 max-w-5xl mx-auto space-y-4">
-        {/* Header row */}
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[#8B8B9E] text-sm">{runs.length} run{runs.length !== 1 ? "s" : ""} total</p>
-          </div>
+          <p className="text-[#8B8B9E] text-sm">{t.wfRunsTotal(runs.length)}</p>
           <div className="flex gap-2">
             <button
               onClick={fetchRuns}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#2A2A3A] bg-[#12121A] text-[#8B8B9E] hover:text-white text-sm transition-colors"
             >
-              <RefreshCw size={14} /> Refresh
+              <RefreshCw size={14} /> {t.wfRefresh}
             </button>
             <button
               onClick={handleRun}
               className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
             >
-              <Play size={14} /> Run Now
+              <Play size={14} /> {t.wfRunNow}
             </button>
           </div>
         </div>
 
-        {/* Runs table */}
         {loading ? (
           <div className="flex items-center justify-center py-20 text-[#5A5A6E] text-sm">
-            <Loader2 size={16} className="animate-spin mr-2" /> Loading runs…
+            <Loader2 size={16} className="animate-spin mr-2" /> {t.wfLoadingRuns}
           </div>
         ) : runs.length === 0 ? (
           <div className="text-center py-20 border border-dashed border-[#2A2A3A] rounded-xl">
             <Play size={32} className="mx-auto mb-3 text-[#5A5A6E]" />
-            <p className="text-[#8B8B9E]">No runs yet</p>
-            <p className="text-[#5A5A6E] text-sm mt-1">Click "Run Now" to trigger this workflow</p>
+            <p className="text-[#8B8B9E]">{t.wfNoRuns}</p>
+            <p className="text-[#5A5A6E] text-sm mt-1">{t.wfNoRunsHint}</p>
           </div>
         ) : (
           <div className="border border-[#2A2A3A] rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#2A2A3A] bg-[#12121A]">
-                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">Run ID</th>
-                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">Status</th>
-                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">Progress</th>
-                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">Started</th>
-                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">Duration</th>
+                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">{t.wfColRunId}</th>
+                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">{t.wfColStatus}</th>
+                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">{t.wfColProgress}</th>
+                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">{t.wfColStarted}</th>
+                  <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium">{t.wfColDuration}</th>
                   <th className="text-left px-4 py-3 text-[#8B8B9E] font-medium"></th>
                 </tr>
               </thead>
@@ -153,7 +161,9 @@ export default function RunsPage({ params }: { params: { id: string } }) {
                 {runs.map((run, i) => (
                   <tr key={run.id} className={cn("border-b border-[#2A2A3A] hover:bg-[#12121A] transition-colors", i === runs.length - 1 && "border-b-0")}>
                     <td className="px-4 py-3 text-[#E0E0F0] font-mono text-xs">{run.id.slice(0, 12)}…</td>
-                    <td className="px-4 py-3"><StatusBadge status={run.status} /></td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={run.status} label={statusLabel(run.status)} />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-24 h-1.5 bg-[#2A2A3A] rounded-full overflow-hidden">
@@ -172,7 +182,7 @@ export default function RunsPage({ params }: { params: { id: string } }) {
                         href={`/workflows/${params.id}/runs/${run.id}`}
                         className="text-blue-400 hover:text-blue-300 text-xs transition-colors"
                       >
-                        View logs →
+                        {t.wfViewLogs}
                       </Link>
                     </td>
                   </tr>
