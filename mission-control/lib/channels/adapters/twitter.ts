@@ -27,11 +27,10 @@ export class TwitterAdapter extends BaseChannelAdapter {
       const endpoint = "https://api.twitter.com/2/tweets";
       const body = JSON.stringify({ text: tweetText });
 
-      // Generate OAuth 1.0a Authorization header
+      // Generate OAuth 1.0a Authorization header (body params NOT in signature for JSON POST)
       const authHeader = this.generateOAuth1Header(
         endpoint,
         "POST",
-        { text: tweetText },
         apiKey,
         apiSecret,
         accessToken,
@@ -77,7 +76,6 @@ export class TwitterAdapter extends BaseChannelAdapter {
   private generateOAuth1Header(
     url: string,
     method: string,
-    params: Record<string, string>,
     consumerKey: string,
     consumerSecret: string,
     accessToken: string,
@@ -86,31 +84,27 @@ export class TwitterAdapter extends BaseChannelAdapter {
     const nonce = randomBytes(16).toString("hex");
     const timestamp = Math.floor(Date.now() / 1000).toString();
 
-    // OAuth 1.0a parameters
+    // OAuth 1.0a parameters only (no body params — Twitter v2 uses JSON body)
     const oauthParams: Record<string, string> = {
       oauth_consumer_key: consumerKey,
       oauth_token: accessToken,
       oauth_signature_method: "HMAC-SHA1",
-      oauth_signature_version: "1.0",
+      oauth_version: "1.0",
       oauth_nonce: nonce,
       oauth_timestamp: timestamp,
     };
 
-    // Combine all parameters for signature base string
-    const allParams: Record<string, string> = { ...oauthParams, ...params };
-    const sortedParams = Object.keys(allParams)
+    // Signature base string — only OAuth params, sorted & encoded ONCE
+    const sortedParams = Object.keys(oauthParams)
       .sort()
-      .map((key) => `${this.percentEncode(key)}=${this.percentEncode(allParams[key])}`)
+      .map((key) => `${this.percentEncode(key)}=${this.percentEncode(oauthParams[key])}`)
       .join("&");
 
-    // Signature base string
     const signatureBaseString = [
       method,
       this.percentEncode(url),
       this.percentEncode(sortedParams),
-    ]
-      .map((s) => this.percentEncode(s))
-      .join("&");
+    ].join("&");
 
     // Signing key
     const signingKey = `${this.percentEncode(consumerSecret)}&${this.percentEncode(accessTokenSecret)}`;
