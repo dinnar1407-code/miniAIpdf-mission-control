@@ -188,8 +188,8 @@ export async function syncStripeKpis(projectId: string | null = null): Promise<v
     const metrics = await fetchStripeMRR();
 
     await Promise.all([
-      writeKpiSnapshot(projectId, 'stripe_mrr', metrics.mrr, undefined, 'stripe'),
-      writeKpiSnapshot(projectId, 'stripe_active_subscriptions', metrics.activeSubscriptions, undefined, 'stripe'),
+      writeKpiSnapshot(projectId, 'mrr', metrics.mrr, undefined, 'stripe'),
+      writeKpiSnapshot(projectId, 'active_subscriptions', metrics.activeSubscriptions, undefined, 'stripe'),
       writeKpiSnapshot(projectId, 'stripe_new_subscriptions', metrics.newThisMonth, undefined, 'stripe'),
       writeKpiSnapshot(projectId, 'stripe_cancelled_subscriptions', metrics.cancelledThisMonth, undefined, 'stripe'),
     ]);
