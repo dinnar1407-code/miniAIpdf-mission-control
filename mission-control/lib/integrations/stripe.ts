@@ -18,7 +18,7 @@ interface StripeSubscription {
   items: {
     data: Array<{
       price: {
-        amount: number | null;
+        unit_amount: number | null;
         currency: string;
       };
     }>;
@@ -87,8 +87,8 @@ export async function fetchStripeMRR(): Promise<StripeMRRResult> {
     let mrr = 0;
     activeSubsData.data.forEach((sub) => {
       sub.items.data.forEach((item) => {
-        if (item.price.amount) {
-          mrr += item.price.amount / 100; // Convert cents to dollars
+        if (item.price.unit_amount) {
+          mrr += item.price.unit_amount / 100; // Convert cents to dollars
         }
       });
     });
