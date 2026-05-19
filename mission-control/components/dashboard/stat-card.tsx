@@ -2,6 +2,7 @@
 
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface StatCardProps {
   label: string;
@@ -11,6 +12,7 @@ interface StatCardProps {
   icon: string;
   color?: string;
   subtitle?: string;
+  configured?: boolean; // false = no data source, show "未配置"
 }
 
 export function StatCard({
@@ -21,17 +23,20 @@ export function StatCard({
   icon,
   color = "#3B82F6",
   subtitle,
+  configured = true,
 }: StatCardProps) {
+  const t = useT();
+
   return (
     <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4 hover:border-[#3A3A4A] transition-all duration-200 cursor-default">
       <div className="flex items-start justify-between mb-3">
         <div
           className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
-          style={{ backgroundColor: `${color}20` }}
+          style={{ backgroundColor: configured ? `${color}20` : "#2A2A3A" }}
         >
           {icon}
         </div>
-        {change && (
+        {configured && change && (
           <div
             className={cn(
               "flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded",
@@ -47,10 +52,20 @@ export function StatCard({
         )}
       </div>
 
-      <div className="text-2xl font-bold text-white mb-0.5">{value}</div>
-      <div className="text-xs text-[#8B8B9E]">{label}</div>
-      {subtitle && (
-        <div className="text-xs text-[#5A5A6E] mt-1">{subtitle}</div>
+      {configured ? (
+        <>
+          <div className="text-2xl font-bold text-white mb-0.5">{value}</div>
+          <div className="text-xs text-[#8B8B9E]">{label}</div>
+          {subtitle && <div className="text-xs text-[#5A5A6E] mt-1">{subtitle}</div>}
+        </>
+      ) : (
+        <>
+          <div className="text-2xl font-bold text-[#3A3A4A] mb-0.5">—</div>
+          <div className="text-xs text-[#8B8B9E]">{label}</div>
+          <div className="text-xs text-[#5A5A6E] mt-1">
+            {t.dashNotConfigured} · {t.dashNotConfiguredHint}
+          </div>
+        </>
       )}
     </div>
   );

@@ -87,24 +87,24 @@ export async function GET() {
       include: { workflow: { select: { name: true } } },
     });
 
+    const hasMrrData = kpiSnapshots.some(k => k.metric === "mrr") || metrics.some(m => m.metric === "mrr");
+    const hasUsersData = kpiSnapshots.some(k => k.metric === "users") || metrics.some(m => m.metric === "users");
+
     const data = {
       stats: {
-        mrr:             Math.round(latestMrr) || 2327,
-        mrrChange:       12,
-        users:           Math.round(latestUsers) || 4494,
-        usersChange:     8,
+        mrr:             hasMrrData ? Math.round(latestMrr) : 0,
+        mrrConfigured:   hasMrrData,
+        users:           hasUsersData ? Math.round(latestUsers) : 0,
+        usersConfigured: hasUsersData,
         openTasks,
         totalTasks,
         activeAgents,
         totalAgents:     agents.length,
-        // Workflow stats
         workflowRunsThisWeek,
         completedRunsThisWeek,
-        // Content stats
         contentPublished,
         contentDraft,
         contentScheduled,
-        // Approval stats
         pendingApprovals: approvalCount,
       },
       kpiHistory: kpiSnapshots.slice(0, 20).map(k => ({
@@ -117,8 +117,10 @@ export async function GET() {
       recentActivity: recentLogs.map(log => ({
         id:           log.id,
         agentName:    log.agent?.name || "System",
-        agentEmoji:   "🤖",
+        agentEmoji:   agentEmoji(log.agent?.name || ""),
         action:       log.action,
+        target:       log.target || undefined,
+        result:       log.result || undefined,
         projectName:  log.projectId || "Platform",
         projectColor: "#3B82F6",
         timestamp:    log.timestamp,
@@ -172,18 +174,16 @@ function formatRelative(date: Date) {
 function getMockData() {
   return {
     stats: {
-      mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8,
-      openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5,
+      mrr: 0, mrrConfigured: false,
+      users: 0, usersConfigured: false,
+      openTasks: 0, totalTasks: 0, activeAgents: 0, totalAgents: 0,
       workflowRunsThisWeek: 0, completedRunsThisWeek: 0,
       contentPublished: 0, contentDraft: 0, contentScheduled: 0,
+      pendingApprovals: 0,
     },
     recentActivity: [],
     alerts: [],
-    agents: [
-      { id: "1", name: "Playfish", emoji: "🌾", status: "active" },
-      { id: "2", name: "PM01",     emoji: "📝", status: "active" },
-      { id: "3", name: "Admin01",  emoji: "🔧", status: "idle" },
-    ],
+    agents: [],
     recentRuns: [],
   };
 }

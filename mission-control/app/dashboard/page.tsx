@@ -3,29 +3,10 @@
 import { Header } from "@/components/layout/header";
 import { useT } from "@/lib/i18n";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { ActivityFeed } from "@/components/dashboard/activity-feed";
-import { AgentStatusMini } from "@/components/dashboard/agent-status-mini";
+import { ActivityFeed, ActivityItem } from "@/components/dashboard/activity-feed";
+import { AgentStatusMini, AgentRecord } from "@/components/dashboard/agent-status-mini";
 import { AlertsPreview } from "@/components/dashboard/alerts-preview";
 import { useEffect, useRef, useState } from "react";
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  BarChart, Bar,
-} from "recharts";
-
-const trafficData = Array.from({ length: 14 }, (_, i) => ({
-  day: `Apr ${i + 3}`,
-  visitors: Math.floor(800 + Math.random() * 600),
-  signups: Math.floor(20 + Math.random() * 40),
-}));
-
-const projectComparisonData = [
-  { project: "MiniAIPDF", mrr: 1247, users: 2847 },
-  { project: "FurMates", mrr: 830, users: 1200 },
-  { project: "NIW", mrr: 0, users: 15 },
-  { project: "Talengineer", mrr: 200, users: 87 },
-  { project: "wheatcoin", mrr: 50, users: 340 },
-  { project: "Dinnar", mrr: 0, users: 5 },
-];
 
 const projects = [
   { name: "MiniAIPDF", slug: "miniaipdf", emoji: "📄", color: "#3B82F6" },
@@ -43,11 +24,9 @@ interface DashboardStats {
   totalAgents: number;
   newAlerts: number;
   mrr?: number;
-  mrrChange?: number;
+  mrrConfigured?: boolean;
   users?: number;
-  usersChange?: number;
-  agentHours?: number;
-  // real data
+  usersConfigured?: boolean;
   workflowRunsThisWeek?: number;
   completedRunsThisWeek?: number;
   contentPublished?: number;
@@ -55,35 +34,20 @@ interface DashboardStats {
   pendingApprovals?: number;
 }
 
-const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-[#1A1A24] border border-[#2A2A3A] rounded-lg p-3 text-xs">
-        <p className="text-[#8B8B9E] mb-1">{label}</p>
-        {payload.map((p) => (
-          <p key={p.name} style={{ color: p.color }}>
-            {p.name}: {p.value.toLocaleString()}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
-
 export default function DashboardPage() {
   const t = useT();
   const [stats, setStats] = useState<DashboardStats>({
-    openTasks: 23, totalTasks: 45, activeAgents: 3, totalAgents: 5,
-    newAlerts: 0, mrr: 2327, mrrChange: 12, users: 4494, usersChange: 8, agentHours: 142,
+    openTasks: 0, totalTasks: 0, activeAgents: 0, totalAgents: 0,
+    newAlerts: 0, mrrConfigured: false, usersConfigured: false,
     workflowRunsThisWeek: 0, completedRunsThisWeek: 0, contentPublished: 0,
   });
   const [recentRuns, setRecentRuns] = useState<{ id: string; name: string; status: string; time: string }[]>([]);
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
+  const [agentList, setAgentList] = useState<AgentRecord[]>([]);
   const [live, setLive] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const sseRef = useRef<EventSource | null>(null);
 
-  // Load initial data from REST
   useEffect(() => {
     fetch("/api/dashboard")
       .then(r => r.ok ? r.json() : null)
@@ -93,11 +57,12 @@ export default function DashboardPage() {
           setLastUpdated(new Date());
         }
         if (data?.recentRuns) setRecentRuns(data.recentRuns);
+        if (data?.recentActivity) setActivityItems(data.recentActivity);
+        if (data?.agents) setAgentList(data.agents);
       })
       .catch(() => {});
   }, []);
 
-  // SSE real-time updates
   useEffect(() => {
     const es = new EventSource("/api/sse");
     sseRef.current = es;
@@ -167,20 +132,18 @@ export default function DashboardPage() {
           <StatCard
             label={t.dashMonthlyRevenue}
             value={`$${(stats.mrr || 0).toLocaleString()}`}
-            change={`+${stats.mrrChange || 0}%`}
-            changeType="up"
             icon="💰"
             color="#10B981"
             subtitle={t.dashMRR}
+            configured={stats.mrrConfigured !== false}
           />
           <StatCard
             label={t.dashTotalUsers}
             value={(stats.users || 0).toLocaleString()}
-            change={`+${stats.usersChange || 0}%`}
-            changeType="up"
             icon="👥"
             color="#3B82F6"
             subtitle={t.dashAllPlatforms}
+            configured={stats.usersConfigured !== false}
           />
           <StatCard
             label={t.dashOpenTasks}
@@ -220,7 +183,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Pending Approvals Card */}
+        {/* Pending Approvals */}
         {(stats.pendingApprovals ?? 0) > 0 && (
           <div className="max-w-md">
             <StatCard
@@ -238,10 +201,10 @@ export default function DashboardPage() {
         {/* Activity + Agents */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <ActivityFeed />
+            <ActivityFeed items={activityItems} />
           </div>
           <div>
-            <AgentStatusMini />
+            <AgentStatusMini agents={agentList} />
           </div>
         </div>
 
@@ -273,50 +236,33 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Traffic Chart + Alerts */}
+        {/* Traffic chart — no data source */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-white">{t.dashTraffic}</h3>
-              <div className="flex items-center gap-4 text-xs text-[#8B8B9E]">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
-                  {t.dashVisitors}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                  {t.dashSignups}
-                </div>
-              </div>
             </div>
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={trafficData}>
-                <XAxis dataKey="day" tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} interval={3} />
-                <YAxis tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Line type="monotone" dataKey="visitors" stroke="#3B82F6" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#3B82F6" }} />
-                <Line type="monotone" dataKey="signups" stroke="#10B981" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: "#10B981" }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="flex flex-col items-center justify-center h-[180px] gap-2">
+              <span className="text-2xl">📊</span>
+              <p className="text-sm text-[#5A5A6E]">{t.noData}</p>
+              <p className="text-xs text-[#3A3A4E]">{t.dashChartNoDataHint}</p>
+            </div>
           </div>
           <div>
             <AlertsPreview />
           </div>
         </div>
 
-        {/* Project Comparison */}
+        {/* Project MRR comparison — no data source */}
         <div className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-white">{t.dashProjectMRR}</h3>
           </div>
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart data={projectComparisonData} barSize={24}>
-              <XAxis dataKey="project" tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#5A5A6E", fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="mrr" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex flex-col items-center justify-center h-[140px] gap-2">
+            <span className="text-2xl">💰</span>
+            <p className="text-sm text-[#5A5A6E]">{t.noData}</p>
+            <p className="text-xs text-[#3A3A4E]">{t.dashNotConfigured} · {t.dashNotConfiguredHint}</p>
+          </div>
         </div>
       </div>
     </div>

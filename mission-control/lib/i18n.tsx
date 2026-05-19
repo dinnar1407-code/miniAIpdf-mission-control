@@ -460,6 +460,18 @@ const zh = {
   adminCancel:               '取消',
   adminEdit:                 '编辑',
 
+  // Dashboard components
+  dashNotConfigured:        '未配置',
+  dashNotConfiguredHint:    '未接入数据源',
+  dashNoActivityData:       '暂无活动记录',
+  dashCrossProjectActivity: '跨项目动态',
+  dashViewAllActivity:      '查看全部动态 →',
+  dashAgentStatusTitle:     'Agent 状态',
+  dashAgentActiveCount:     (n: number) => `${n} 活跃`,
+  dashAgentIdle:            '空闲',
+  dashManageAgents:         '管理智能体 →',
+  dashChartNoDataHint:      '接入 Analytics 后自动填充',
+
   // Workflows
   wfSubtitle:       '自动化引擎 · J.A.R.V.I.S. 协议',
   wfStatActive:     '活跃',
@@ -951,6 +963,18 @@ const en: typeof zh = {
   adminSave:                 'Save',
   adminCancel:               'Cancel',
   adminEdit:                 'Edit',
+
+  // Dashboard components
+  dashNotConfigured:        'Not configured',
+  dashNotConfiguredHint:    'No data source connected',
+  dashNoActivityData:       'No activity recorded',
+  dashCrossProjectActivity: 'Cross-Project Activity',
+  dashViewAllActivity:      'View all activity →',
+  dashAgentStatusTitle:     'Agent Status',
+  dashAgentActiveCount:     (n: number) => `${n} active`,
+  dashAgentIdle:            'Idle',
+  dashManageAgents:         'Manage agents →',
+  dashChartNoDataHint:      'Connect Analytics to populate',
 
   // Workflows
   wfSubtitle:       'Automation engine · J.A.R.V.I.S. protocols',
