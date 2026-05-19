@@ -73,6 +73,23 @@ async function executeStep(
         userMessage = `${userMessage}\n\n${memoryContext}`;
       }
 
+      // 注入渠道语言设置，让 Agent 根据目标渠道选择语言
+      try {
+        const channelCreds = await prisma.channelCredential.findMany();
+        const langLines: string[] = [];
+        for (const c of channelCreds) {
+          try {
+            const d = JSON.parse(c.defaults) as { language?: string };
+            if (d.language && d.language !== "auto") {
+              langLines.push(`${c.channelId}: ${d.language === "zh" ? "中文" : "English"}`);
+            }
+          } catch { /* skip malformed */ }
+        }
+        if (langLines.length > 0) {
+          userMessage = `${userMessage}\n\n[渠道语言设置]\n${langLines.join("\n")}\n请根据目标渠道使用对应语言创作内容。`;
+        }
+      } catch { /* non-fatal */ }
+
       let output: string;
 
       if (agentTools.length > 0) {

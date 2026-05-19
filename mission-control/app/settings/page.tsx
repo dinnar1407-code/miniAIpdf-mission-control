@@ -29,6 +29,7 @@ interface ChannelRecord {
   supportedTypes: string[]; requiresApproval: boolean; maxLength?: number;
   enabled: boolean; configured: boolean;
   testedAt: string | null; testResult: string | null;
+  defaults?: Record<string, unknown>;
 }
 
 type Tab = "projects" | "channels" | "integrations" | "ai" | "apikeys";
@@ -144,21 +145,24 @@ const INTEGRATION_BASE = [
 // ── Channel Card ───────────────────────────────────────────────
 function ChannelCard({ ch, onSave, onTest }: {
   ch: ChannelRecord;
-  onSave: (id: string, enabled: boolean, creds: Record<string, string>) => Promise<void>;
+  onSave: (id: string, enabled: boolean, creds: Record<string, string>, defaults: Record<string, unknown>) => Promise<void>;
   onTest: (id: string) => Promise<string>;
 }) {
   const t = useT();
   const fields = CHANNEL_FIELDS[ch.id] || [];
-  const [open,    setOpen]    = useState(false);
-  const [creds,   setCreds]   = useState<Record<string, string>>({});
-  const [enabled, setEnabled] = useState(ch.enabled);
+  const [open,     setOpen]     = useState(false);
+  const [creds,    setCreds]    = useState<Record<string, string>>({});
+  const [enabled,  setEnabled]  = useState(ch.enabled);
+  const [language, setLanguage] = useState<"auto" | "zh" | "en">(
+    (ch.defaults?.language as "auto" | "zh" | "en") ?? "auto"
+  );
   const [saving,  setSaving]  = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(ch.testResult);
 
   const save = async () => {
     setSaving(true);
-    await onSave(ch.id, enabled, creds);
+    await onSave(ch.id, enabled, creds, { language });
     setSaving(false);
     setOpen(false);
   };
@@ -227,6 +231,20 @@ function ChannelCard({ ch, onSave, onTest }: {
               </div>
             ))
           )}
+
+          {/* Language setting */}
+          <div>
+            <label className="text-xs text-[#8B8B9E] mb-1 block">{t.settingsChannelLang}</label>
+            <select
+              value={language}
+              onChange={e => setLanguage(e.target.value as "auto" | "zh" | "en")}
+              className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#3B82F6]"
+            >
+              <option value="auto">{t.settingsChannelLangAuto}</option>
+              <option value="zh">{t.settingsChannelLangZh}</option>
+              <option value="en">{t.settingsChannelLangEn}</option>
+            </select>
+          </div>
 
           {/* Test result */}
           {testMsg && (
@@ -519,12 +537,12 @@ export default function SettingsPage() {
   };
 
   // Channels
-  const saveChannel = useCallback(async (channelId: string, enabled: boolean, creds: Record<string, string>) => {
+  const saveChannel = useCallback(async (channelId: string, enabled: boolean, creds: Record<string, string>, defaults: Record<string, unknown> = {}) => {
     await fetch("/api/settings/channels", {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channelId, enabled, credentials: creds }),
+      body: JSON.stringify({ channelId, enabled, credentials: creds, defaults }),
     });
-    setChannels(prev => prev.map(c => c.id === channelId ? { ...c, enabled, configured: Object.keys(creds).length > 0 } : c));
+    setChannels(prev => prev.map(c => c.id === channelId ? { ...c, enabled, configured: Object.keys(creds).length > 0, defaults } : c));
   }, []);
 
   const testChannel = useCallback(async (channelId: string): Promise<string> => {

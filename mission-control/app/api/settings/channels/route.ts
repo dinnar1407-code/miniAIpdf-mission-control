@@ -25,6 +25,7 @@ export async function GET() {
       configured:       cred ? Object.keys(JSON.parse(cred.credentials)).length > 0 : false,
       testedAt:         cred?.testedAt ?? null,
       testResult:       cred?.testResult ?? null,
+      defaults:         cred ? JSON.parse(cred.defaults) : {},
     };
   });
 
