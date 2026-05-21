@@ -9,6 +9,42 @@ const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 // 微信 API 基址
 const WX_BASE = "https://api.weixin.qq.com";
 
+// ── Access Token ──────────────────────────────────────────────
+
+interface WxTokenResponse {
+  access_token?: string;
+  expires_in?: number;
+  errcode?: number;
+  errmsg?: string;
+}
+
+async function getAccessToken(appId: string, appSecret: string): Promise<string> {
+  const cached = tokenCache.get(appId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.token;
+  }
+
+  const url = `${WX_BASE}/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`;
+  const res = await fetch(url);
+  const data = (await res.json()) as WxTokenResponse;
+
+  if (!data.access_token) {
+    throw new Error(`获取 access_token 失败：[${data.errcode}] ${data.errmsg}`);
+  }
+
+  // 提前 5 分钟刷新，避免边界过期
+  tokenCache.set(appId, {
+    token: data.access_token,
+    expiresAt: Date.now() + ((data.expires_in ?? 7200) - 300) * 1000,
+  });
+
+  return data.access_token;
+}
+
+// 仅供单元测试使用
+export const _testOnly_tokenCache = tokenCache;
+export const _testOnly_getAccessToken = getAccessToken;
+
 export class WechatAdapter extends BaseChannelAdapter {
   readonly id = "wechat" as const;
   readonly name = "微信公众号";
@@ -24,8 +60,12 @@ export class WechatAdapter extends BaseChannelAdapter {
       return { success: false, error: "未配置 AppID 或 AppSecret" };
     }
 
-    // TODO: implement in later tasks
-    void content;
-    return { success: false, error: "实现进行中" };
+    try {
+      const accessToken = await getAccessToken(appId, appSecret);
+      void accessToken; // 后续步骤使用
+      return { success: false, error: "实现进行中" };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "未知错误" };
+    }
   }
 }
