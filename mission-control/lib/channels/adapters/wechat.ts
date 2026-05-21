@@ -3,9 +3,10 @@
 import { BaseChannelAdapter } from "./base";
 import { ChannelConfig, ContentType, PublishContent, PublishResult } from "../types";
 
-// access_token 模块级缓存（key = appId）
+// access_token 模块级缓存（key = appId）— 用于 getAccessToken()
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
+// 微信 API 基址
 const WX_BASE = "https://api.weixin.qq.com";
 
 export class WechatAdapter extends BaseChannelAdapter {

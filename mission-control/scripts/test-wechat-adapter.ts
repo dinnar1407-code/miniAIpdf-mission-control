@@ -19,10 +19,8 @@ function test(name: string, fn: () => void) {
 
 const adapter = new WechatAdapter();
 
-// ── Test Suite 1: 凭证缺失时的 guard ──────────────────────────
-console.log("\n[Suite 1] 凭证缺失 guard");
-
 async function runSuite1() {
+  console.log("\n[Suite 1] 凭证缺失 guard");
   const result = await adapter.publish(
     { body: "test" },
     { channelId: "wechat", enabled: true, credentials: {} }
