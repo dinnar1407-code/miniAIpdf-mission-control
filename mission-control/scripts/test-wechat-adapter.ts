@@ -101,11 +101,40 @@ function runSuite3() {
   });
 }
 
+// ── Test Suite 4: publish() 结构验证（无真实凭证）─────────────
+
+async function runSuite4() {
+  console.log("\n[Suite 4] publish() 结构验证");
+
+  const result = await adapter.publish(
+    { body: "test body", title: "Test" },
+    {
+      channelId: "wechat",
+      enabled: true,
+      credentials: { appId: "fake_id", appSecret: "fake_secret" },
+      defaults: { publishMode: "draft" },
+    }
+  );
+
+  test("fake 凭证时 publish 返回 PublishResult 结构", () => {
+    assert.ok("success" in result, "缺少 success 字段");
+  });
+
+  test("fake 凭证时 success 为 false（网络请求失败）", () => {
+    assert.equal(result.success, false);
+  });
+
+  test("fake 凭证时 error 为字符串", () => {
+    assert.equal(typeof result.error, "string");
+  });
+}
+
 // ── 汇总 ──────────────────────────────────────────────────────
 async function main() {
   await runSuite1();
   await runSuite2();
   runSuite3();
+  await runSuite4();
 
   console.log(`\n结果：${passed} 通过，${failed} 失败`);
   if (failed > 0) process.exit(1);

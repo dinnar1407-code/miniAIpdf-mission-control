@@ -204,12 +204,50 @@ export class WechatAdapter extends BaseChannelAdapter {
       return { success: false, error: "未配置 AppID 或 AppSecret" };
     }
 
+    const publishMode = (config.defaults?.publishMode as string) ?? "draft";
+    const defaults = config.defaults ?? {};
+
     try {
-      const accessToken = await getAccessToken(appId, appSecret);
-      void accessToken; // 后续步骤使用
-      return { success: false, error: "实现进行中" };
+      // Step 1: 获取 access_token（带缓存，40001 时清缓存重试一次）
+      let accessToken: string;
+      try {
+        accessToken = await getAccessToken(appId, appSecret);
+      } catch (err) {
+        tokenCache.delete(appId);
+        accessToken = await getAccessToken(appId, appSecret);
+        void err;
+      }
+
+      // Step 2: 上传封面图（如有）
+      let thumbMediaId = "";
+      if (content.imageUrls?.[0]) {
+        thumbMediaId = await uploadThumbMedia(content.imageUrls[0], accessToken);
+      }
+
+      // Step 3: 创建草稿
+      const article = buildArticle(content, defaults, thumbMediaId);
+      const draftMediaId = await addDraft(article, accessToken);
+
+      // Step 4: 群发（可选）
+      if (publishMode === "mass") {
+        const msgId = await massSend(draftMediaId, accessToken);
+        return {
+          success: true,
+          postId: String(msgId),
+          raw: { mode: "mass", draftMediaId, msgId },
+        };
+      }
+
+      return {
+        success: true,
+        postId: draftMediaId,
+        raw: { mode: "draft" },
+      };
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : "未知错误" };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : "未知错误",
+      };
     }
   }
 }
