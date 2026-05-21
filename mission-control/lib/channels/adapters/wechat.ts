@@ -1,7 +1,7 @@
 // 微信公众号 — 完整发布流程
 // 支持：纯文字图文 / 带封面图图文 / 草稿模式 / 群发模式
 import { BaseChannelAdapter } from "./base";
-import { ChannelConfig, ContentType, PublishContent, PublishResult } from "../types";
+import { ChannelConfig, PublishContent, PublishResult } from "../types";
 
 // access_token 模块级缓存（key = appId）— 用于 getAccessToken()
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
@@ -69,9 +69,9 @@ function buildArticle(
 ): WxArticle {
   return {
     title: content.title ?? "无标题",
-    author: (defaults.author as string) ?? "",
+    author: typeof defaults.author === "string" ? defaults.author : "",
     content: content.body,
-    digest: content.summary ?? content.body.slice(0, 120),
+    digest: (content.summary ?? content.body).slice(0, 120),
     thumb_media_id: thumbMediaId,
     need_open_comment: 0,
     only_fans_can_comment: 0,
@@ -210,21 +210,18 @@ export class WechatAdapter extends BaseChannelAdapter {
     const defaults = config.defaults ?? {};
 
     try {
-      // Step 1: 获取 access_token（带缓存，40001 时清缓存重试一次）
-      let accessToken: string;
-      try {
-        accessToken = await getAccessToken(appId, appSecret);
-      } catch (err) {
-        // 原始错误可能是缓存 token 过期（40001）；清缓存后重试一次
-        console.warn("[wechat] getAccessToken 首次失败，清缓存后重试：", (err as Error).message);
-        tokenCache.delete(appId);
-        accessToken = await getAccessToken(appId, appSecret);
-      }
+      // Step 1: 获取 access_token（带缓存，缓存过期时自动刷新）
+      // 注意：40001 mid-request 场景（草稿/群发接口返回 token 过期）暂不处理，v1 范围外
+      const accessToken = await getAccessToken(appId, appSecret);
 
-      // Step 2: 上传封面图（如有）
+      // Step 2: 上传封面图（如有）；无封面图时用 defaults.defaultThumbMediaId 或报错
       let thumbMediaId = "";
       if (content.imageUrls?.[0]) {
         thumbMediaId = await uploadThumbMedia(content.imageUrls[0], accessToken);
+      } else if (typeof defaults.defaultThumbMediaId === "string" && defaults.defaultThumbMediaId) {
+        thumbMediaId = defaults.defaultThumbMediaId;
+      } else {
+        return { success: false, error: "微信公众号草稿需要封面图（imageUrls[0] 或 defaults.defaultThumbMediaId）" };
       }
 
       // Step 3: 创建草稿
