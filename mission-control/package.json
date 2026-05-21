@@ -17,7 +17,8 @@
     "postinstall": "prisma generate",
     "test:memory": "tsx --env-file=.env.local scripts/test-memory-retrieval.ts",
     "test:planner": "tsx --env-file=.env.local scripts/test-planner.ts",
-    "test:mission": "tsx --env-file=.env.local scripts/test-mission.ts"
+    "test:mission": "tsx --env-file=.env.local scripts/test-mission.ts",
+    "test:wechat": "tsx --env-file=.env.local scripts/test-wechat-adapter.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
