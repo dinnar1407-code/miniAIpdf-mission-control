@@ -125,6 +125,70 @@ async function uploadThumbMedia(imageUrl: string, accessToken: string): Promise<
   return data.media_id;
 }
 
+// ── 草稿 ───────────────────────────────────────────────────────
+
+interface WxDraftAddResponse {
+  media_id?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
+async function addDraft(article: WxArticle, accessToken: string): Promise<string> {
+  const url = `${WX_BASE}/cgi-bin/draft/add?access_token=${accessToken}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ articles: [article] }),
+  }).catch(() => {
+    throw new Error("草稿创建失败：网络请求错误");
+  });
+  if (!res.ok) {
+    throw new Error(`草稿创建失败：HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as WxDraftAddResponse;
+
+  if (!data.media_id) {
+    throw new Error(`草稿创建失败：[${data.errcode}] ${data.errmsg}`);
+  }
+
+  return data.media_id;
+}
+
+// ── 群发 ───────────────────────────────────────────────────────
+
+interface WxMassSendResponse {
+  errcode?: number;
+  errmsg?: string;
+  msg_id?: number;
+  msg_data_id?: number;
+}
+
+async function massSend(draftMediaId: string, accessToken: string): Promise<number> {
+  const url = `${WX_BASE}/cgi-bin/message/mass/sendall?access_token=${accessToken}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filter: { is_to_all: true },
+      mpnews: { media_id: draftMediaId },
+      msgtype: "mpnews",
+      send_ignore_reprint: 1,
+    }),
+  }).catch(() => {
+    throw new Error("群发失败：网络请求错误");
+  });
+  if (!res.ok) {
+    throw new Error(`群发失败：HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as WxMassSendResponse;
+
+  if (data.errcode && data.errcode !== 0) {
+    throw new Error(`群发失败：[${data.errcode}] ${data.errmsg}`);
+  }
+
+  return data.msg_id ?? 0;
+}
+
 export class WechatAdapter extends BaseChannelAdapter {
   readonly id = "wechat" as const;
   readonly name = "微信公众号";
