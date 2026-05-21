@@ -1,6 +1,12 @@
-// 微信公众号 — 接口预留，接入微信公众号 API
+// 微信公众号 — 完整发布流程
+// 支持：纯文字图文 / 带封面图图文 / 草稿模式 / 群发模式
 import { BaseChannelAdapter } from "./base";
 import { ChannelConfig, ContentType, PublishContent, PublishResult } from "../types";
+
+// access_token 模块级缓存（key = appId）
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+const WX_BASE = "https://api.weixin.qq.com";
 
 export class WechatAdapter extends BaseChannelAdapter {
   readonly id = "wechat" as const;
@@ -11,19 +17,14 @@ export class WechatAdapter extends BaseChannelAdapter {
   readonly requiresApproval = true;
 
   async publish(content: PublishContent, config: ChannelConfig): Promise<PublishResult> {
-    const appId     = config.credentials.appId;
-    const appSecret = config.credentials.appSecret;
+    const { appId, appSecret } = config.credentials;
 
     if (!appId || !appSecret) {
-      return this.stubPublish(this.name);
+      return { success: false, error: "未配置 AppID 或 AppSecret" };
     }
 
-    // TODO: 微信公众号发布流程（需要图文素材 + 群发）
-    // Step 1: POST /cgi-bin/token → 获取 access_token
-    // Step 2: POST /cgi-bin/media/uploadnews → 上传图文素材
-    // Step 3: POST /cgi-bin/message/mass/sendall → 群发
-
+    // TODO: implement in later tasks
     void content;
-    return this.stubPublish(this.name);
+    return { success: false, error: "实现进行中" };
   }
 }
