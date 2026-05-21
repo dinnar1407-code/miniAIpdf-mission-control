@@ -80,6 +80,49 @@ function buildArticle(
 
 export const _testOnly_buildArticle = buildArticle;
 
+// ── 封面图上传 ─────────────────────────────────────────────────
+
+interface WxMediaUploadResponse {
+  type?: string;
+  media_id?: string;
+  created_at?: number;
+  errcode?: number;
+  errmsg?: string;
+}
+
+async function uploadThumbMedia(imageUrl: string, accessToken: string): Promise<string> {
+  // 微信不接受外部 URL，需先下载图片到内存
+  const imgRes = await fetch(imageUrl).catch(() => {
+    throw new Error(`封面图下载失败：网络请求错误`);
+  });
+  if (!imgRes.ok) {
+    throw new Error(`封面图下载失败：HTTP ${imgRes.status}`);
+  }
+  const imgBuffer = await imgRes.arrayBuffer();
+  const imgBlob = new Blob([imgBuffer]);
+
+  // 从 URL 推断文件名（取最后一段，默认 cover.jpg）
+  const fileName = imageUrl.split("/").pop()?.split("?")[0] || "cover.jpg";
+
+  const form = new FormData();
+  form.append("media", imgBlob, fileName);
+
+  const url = `${WX_BASE}/cgi-bin/media/upload?access_token=${accessToken}&type=thumb`;
+  const res = await fetch(url, { method: "POST", body: form }).catch(() => {
+    throw new Error("封面图上传失败：网络请求错误");
+  });
+  if (!res.ok) {
+    throw new Error(`封面图上传失败：HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as WxMediaUploadResponse;
+
+  if (!data.media_id) {
+    throw new Error(`封面图上传失败：[${data.errcode}] ${data.errmsg}`);
+  }
+
+  return data.media_id;
+}
+
 export class WechatAdapter extends BaseChannelAdapter {
   readonly id = "wechat" as const;
   readonly name = "微信公众号";
