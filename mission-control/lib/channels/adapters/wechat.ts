@@ -52,7 +52,7 @@ export const _testOnly_getAccessToken = getAccessToken;
 
 // ── 内容格式化 ─────────────────────────────────────────────────
 
-interface WxArticle {
+export interface WxArticle {
   title: string;
   author: string;
   content: string;
