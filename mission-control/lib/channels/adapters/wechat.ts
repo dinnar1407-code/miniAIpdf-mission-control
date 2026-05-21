@@ -99,7 +99,9 @@ async function uploadThumbMedia(imageUrl: string, accessToken: string): Promise<
     throw new Error(`封面图下载失败：HTTP ${imgRes.status}`);
   }
   const imgBuffer = await imgRes.arrayBuffer();
-  const imgBlob = new Blob([imgBuffer]);
+  // 从响应头推断 MIME 类型，兜底 image/jpeg（微信要求有效的图片类型）
+  const contentType = imgRes.headers.get("content-type")?.split(";")[0] ?? "image/jpeg";
+  const imgBlob = new Blob([imgBuffer], { type: contentType });
 
   // 从 URL 推断文件名（取最后一段，默认 cover.jpg）
   const fileName = imageUrl.split("/").pop()?.split("?")[0] || "cover.jpg";
