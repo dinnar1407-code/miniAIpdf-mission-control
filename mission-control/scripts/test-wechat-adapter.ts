@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { WechatAdapter } from "@/lib/channels/adapters/wechat";
-import { _testOnly_tokenCache, _testOnly_getAccessToken } from "@/lib/channels/adapters/wechat";
+import { WechatAdapter, _testOnly_tokenCache, _testOnly_getAccessToken } from "@/lib/channels/adapters/wechat";
 
 // ── 辅助函数：测试断言 ──────────────────────────────────────────
 let passed = 0;

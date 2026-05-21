@@ -25,7 +25,12 @@ async function getAccessToken(appId: string, appSecret: string): Promise<string>
   }
 
   const url = `${WX_BASE}/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`;
-  const res = await fetch(url);
+  const res = await fetch(url).catch(() => {
+    throw new Error("获取 access_token 失败：网络请求错误");
+  });
+  if (!res.ok) {
+    throw new Error(`获取 access_token 失败：HTTP ${res.status}`);
+  }
   const data = (await res.json()) as WxTokenResponse;
 
   if (!data.access_token) {
