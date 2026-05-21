@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { WechatAdapter, _testOnly_tokenCache, _testOnly_getAccessToken } from "@/lib/channels/adapters/wechat";
+import { WechatAdapter, _testOnly_tokenCache, _testOnly_getAccessToken, _testOnly_buildArticle } from "@/lib/channels/adapters/wechat";
 
 // ── 辅助函数：测试断言 ──────────────────────────────────────────
 let passed = 0;
@@ -65,10 +65,47 @@ async function runSuite2() {
   }
 }
 
+// ── Test Suite 3: buildArticle ──────────────────────────────
+
+function runSuite3() {
+  console.log("\n[Suite 3] buildArticle");
+
+  test("有 title 时使用 title", () => {
+    const a = _testOnly_buildArticle({ body: "正文内容", title: "我的标题" }, {}, "");
+    assert.equal(a.title, "我的标题");
+  });
+
+  test("无 title 时默认 '无标题'", () => {
+    const a = _testOnly_buildArticle({ body: "正文" }, {}, "");
+    assert.equal(a.title, "无标题");
+  });
+
+  test("有 summary 时用 summary 作 digest", () => {
+    const a = _testOnly_buildArticle({ body: "正文", summary: "摘要内容" }, {}, "");
+    assert.equal(a.digest, "摘要内容");
+  });
+
+  test("无 summary 时 digest 取正文前 120 字", () => {
+    const a = _testOnly_buildArticle({ body: "a".repeat(200) }, {}, "");
+    assert.equal(a.digest.length, 120);
+  });
+
+  test("defaults.author 传入 author 字段", () => {
+    const a = _testOnly_buildArticle({ body: "正文" }, { author: "Terry" }, "");
+    assert.equal(a.author, "Terry");
+  });
+
+  test("thumbMediaId 传入 thumb_media_id", () => {
+    const a = _testOnly_buildArticle({ body: "正文" }, {}, "media_abc");
+    assert.equal(a.thumb_media_id, "media_abc");
+  });
+}
+
 // ── 汇总 ──────────────────────────────────────────────────────
 async function main() {
   await runSuite1();
   await runSuite2();
+  runSuite3();
 
   console.log(`\n结果：${passed} 通过，${failed} 失败`);
   if (failed > 0) process.exit(1);

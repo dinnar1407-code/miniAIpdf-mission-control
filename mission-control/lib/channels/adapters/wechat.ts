@@ -50,6 +50,36 @@ async function getAccessToken(appId: string, appSecret: string): Promise<string>
 export const _testOnly_tokenCache = tokenCache;
 export const _testOnly_getAccessToken = getAccessToken;
 
+// ── 内容格式化 ─────────────────────────────────────────────────
+
+interface WxArticle {
+  title: string;
+  author: string;
+  content: string;
+  digest: string;
+  thumb_media_id: string;
+  need_open_comment: number;
+  only_fans_can_comment: number;
+}
+
+function buildArticle(
+  content: PublishContent,
+  defaults: Record<string, unknown>,
+  thumbMediaId: string
+): WxArticle {
+  return {
+    title: content.title ?? "无标题",
+    author: (defaults.author as string) ?? "",
+    content: content.body,
+    digest: content.summary ?? content.body.slice(0, 120),
+    thumb_media_id: thumbMediaId,
+    need_open_comment: 0,
+    only_fans_can_comment: 0,
+  };
+}
+
+export const _testOnly_buildArticle = buildArticle;
+
 export class WechatAdapter extends BaseChannelAdapter {
   readonly id = "wechat" as const;
   readonly name = "微信公众号";
