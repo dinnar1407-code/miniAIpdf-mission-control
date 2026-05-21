@@ -182,7 +182,7 @@ async function massSend(draftMediaId: string, accessToken: string): Promise<numb
   }
   const data = (await res.json()) as WxMassSendResponse;
 
-  if (data.errcode && data.errcode !== 0) {
+  if (data.errcode !== undefined && data.errcode !== 0) {
     throw new Error(`群发失败：[${data.errcode}] ${data.errmsg}`);
   }
 
