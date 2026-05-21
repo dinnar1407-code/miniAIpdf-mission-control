@@ -204,7 +204,9 @@ export class WechatAdapter extends BaseChannelAdapter {
       return { success: false, error: "未配置 AppID 或 AppSecret" };
     }
 
-    const publishMode = (config.defaults?.publishMode as string) ?? "draft";
+    const publishMode = typeof config.defaults?.publishMode === "string"
+      ? config.defaults.publishMode
+      : "draft";
     const defaults = config.defaults ?? {};
 
     try {
@@ -213,9 +215,10 @@ export class WechatAdapter extends BaseChannelAdapter {
       try {
         accessToken = await getAccessToken(appId, appSecret);
       } catch (err) {
+        // 原始错误可能是缓存 token 过期（40001）；清缓存后重试一次
+        console.warn("[wechat] getAccessToken 首次失败，清缓存后重试：", (err as Error).message);
         tokenCache.delete(appId);
         accessToken = await getAccessToken(appId, appSecret);
-        void err;
       }
 
       // Step 2: 上传封面图（如有）
