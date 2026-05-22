@@ -20,5 +20,5 @@ export function needsApproval(p: PlanRiskAttrs): boolean {
   // User-facing blast radius requires approval
   if (p.blastRadius === "all_users" || p.blastRadius === "public") return true;
 
-  return true;
+  return false;
 }

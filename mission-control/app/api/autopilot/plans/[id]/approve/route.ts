@@ -62,8 +62,13 @@ export async function POST(
   try {
     mission = await createMissionFromPlan(planId);
   } catch (err) {
-    console.error("createMissionFromPlan failed:", String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("createMissionFromPlan failed:", msg);
+    return NextResponse.json(
+      { error: `Plan approved but Mission creation failed: ${msg}` },
+      { status: 500 }
+    );
   }
 
-  return NextResponse.json({ ...updatedPlan, missionId: mission?.id ?? null });
+  return NextResponse.json({ ...updatedPlan, missionId: mission.id });
 }

@@ -114,12 +114,21 @@ export async function planFromInsight(
   }
   const planOutput = parsed.data;
 
-  // 11. Runtime agentId validation — reject hallucinated slugs
+  // 11. Runtime agentId validation — reject hallucinated slugs; fill null with fallback
+  if (availableAgents.length === 0) {
+    throw new Error(
+      "No active agents available — cannot generate a plan. " +
+      "Ensure at least one agent has status='active' in the database."
+    );
+  }
+  const fallbackSlug = availableAgents[0].slug;
   for (const step of planOutput.steps) {
-    if (step.agentId !== null && !validSlugs.has(step.agentId)) {
+    if (step.agentId === null) {
+      step.agentId = fallbackSlug;
+    } else if (!validSlugs.has(step.agentId)) {
       throw new Error(
         `Planner LLM invented agentId "${step.agentId}" (step order=${step.order}). ` +
-        `Valid slugs: [${Array.from(validSlugs).join(", ") || "none"}]`
+        `Valid slugs: [${Array.from(validSlugs).join(", ")}]`
       );
     }
   }
