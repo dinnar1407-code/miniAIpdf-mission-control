@@ -8,6 +8,7 @@ import { buildUserPrompt }                from "@/prompts/planner-user";
 import { PlanOutputSchema }               from "@/lib/planner-schema";
 import { needsApproval }                  from "@/lib/approval-policy";
 import { inngest }                        from "@/inngest/client";
+import { createMissionFromPlan }          from "@/lib/mission-orchestrator";
 
 const prisma = new PrismaClient();
 
@@ -234,8 +235,11 @@ export async function planFromInsight(
     return { plan, steps };
   });
 
-  // 15. Fire Inngest event on auto-approve
+  // 15. Trigger Mission on auto-approve — direct call + optional Inngest notification
   if (!requireApproval) {
+    void createMissionFromPlan(plan.id).catch((err) =>
+      console.error("Auto-approve Mission creation failed:", String(err))
+    );
     void inngest.send({ name: "autopilot/plans.approved", data: { planId: plan.id } });
   }
 
