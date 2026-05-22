@@ -75,7 +75,7 @@ function formatNote(mission: {
     `project: ${mission.project.slug}`,
     `status: ${mission.status}`,
     `completed_at: "${mission.completedAt?.toISOString() ?? ""}"`,
-    `duration: "${dur}"`,
+    `duration_str: "${dur}"`,
     `risk_level: ${mission.plan.riskLevel}`,
     `reversibility: ${mission.plan.reversibility}`,
     `tags: [jarvis, mission, ${mission.project.slug}]`,
