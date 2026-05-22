@@ -157,6 +157,10 @@ function ChannelCard({ ch, onSave, onTest }: {
     (ch.defaults?.language as "auto" | "zh" | "en") ?? "auto"
   );
   const [thumbMediaId, setThumbMediaId] = useState<string>((ch.defaults?.defaultThumbMediaId as string) ?? "");
+  const [materials, setMaterials] = useState<{ media_id: string; name: string; url: string }[]>([]);
+  const [loadingMat, setLoadingMat] = useState(false);
+  const [matError, setMatError] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(ch.testResult);
@@ -238,14 +242,55 @@ function ChannelCard({ ch, onSave, onTest }: {
           {ch.id === "wechat" && (
             <div>
               <label className="text-xs text-[#8B8B9E] mb-1 block">默认封面图 Media ID</label>
-              <input
-                type="text"
-                value={thumbMediaId}
-                onChange={e => setThumbMediaId(e.target.value)}
-                placeholder="从微信素材库获取（可选）"
-                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#3A3A4E] focus:outline-none focus:border-[#3B82F6] font-mono"
-              />
-              <p className="text-[10px] text-[#5A5A6E] mt-1">发布草稿时无封面图时使用。在微信公众平台 → 素材管理 → 图片 中上传图片后获取 media_id。</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={thumbMediaId}
+                  onChange={e => setThumbMediaId(e.target.value)}
+                  placeholder="从微信素材库获取（可选）"
+                  className="flex-1 bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#3A3A4E] focus:outline-none focus:border-[#3B82F6] font-mono"
+                />
+                <button
+                  onClick={async () => {
+                    setLoadingMat(true);
+                    setMatError(null);
+                    setShowPicker(false);
+                    try {
+                      const res = await fetch("/api/settings/channels/wechat/materials");
+                      const data = await res.json() as { items?: { media_id: string; name: string; url: string }[]; error?: string };
+                      if (data.error) { setMatError(data.error); }
+                      else { setMaterials(data.items ?? []); setShowPicker(true); }
+                    } catch { setMatError("请求失败"); }
+                    setLoadingMat(false);
+                  }}
+                  disabled={loadingMat}
+                  className="flex-shrink-0 px-3 py-2 bg-[#1A1A24] hover:bg-[#2A2A3A] text-[#8B8B9E] text-xs rounded-lg transition-colors whitespace-nowrap"
+                >
+                  {loadingMat ? <Loader2 size={11} className="animate-spin inline" /> : "查询素材库"}
+                </button>
+              </div>
+              {matError && <p className="text-[10px] text-red-400 mt-1">{matError}</p>}
+              {showPicker && materials.length === 0 && (
+                <p className="text-[10px] text-[#5A5A6E] mt-1">素材库暂无图片</p>
+              )}
+              {showPicker && materials.length > 0 && (
+                <div className="mt-2 grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                  {materials.map(m => (
+                    <button
+                      key={m.media_id}
+                      onClick={() => { setThumbMediaId(m.media_id); setShowPicker(false); }}
+                      title={m.name}
+                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
+                        thumbMediaId === m.media_id ? "border-[#3B82F6]" : "border-[#2A2A3A] hover:border-[#3B82F6]/50"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-[10px] text-[#5A5A6E] mt-1">发布草稿无封面图时自动使用此图。</p>
             </div>
           )}
 
