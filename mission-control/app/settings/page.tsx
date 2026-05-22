@@ -156,13 +156,15 @@ function ChannelCard({ ch, onSave, onTest }: {
   const [language, setLanguage] = useState<"auto" | "zh" | "en">(
     (ch.defaults?.language as "auto" | "zh" | "en") ?? "auto"
   );
+  const [thumbMediaId, setThumbMediaId] = useState<string>((ch.defaults?.defaultThumbMediaId as string) ?? "");
   const [saving,  setSaving]  = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(ch.testResult);
 
   const save = async () => {
     setSaving(true);
-    await onSave(ch.id, enabled, creds, { language });
+    const extra = ch.id === "wechat" ? { defaultThumbMediaId: thumbMediaId } : {};
+    await onSave(ch.id, enabled, creds, { language, ...extra });
     setSaving(false);
     setOpen(false);
   };
@@ -230,6 +232,21 @@ function ChannelCard({ ch, onSave, onTest }: {
                 />
               </div>
             ))
+          )}
+
+          {/* WeChat: default thumb media ID */}
+          {ch.id === "wechat" && (
+            <div>
+              <label className="text-xs text-[#8B8B9E] mb-1 block">默认封面图 Media ID</label>
+              <input
+                type="text"
+                value={thumbMediaId}
+                onChange={e => setThumbMediaId(e.target.value)}
+                placeholder="从微信素材库获取（可选）"
+                className="w-full bg-[#0A0A0F] border border-[#2A2A3A] rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#3A3A4E] focus:outline-none focus:border-[#3B82F6] font-mono"
+              />
+              <p className="text-[10px] text-[#5A5A6E] mt-1">发布草稿时无封面图时使用。在微信公众平台 → 素材管理 → 图片 中上传图片后获取 media_id。</p>
+            </div>
           )}
 
           {/* Language setting */}
