@@ -65,6 +65,42 @@ export async function POST(req: NextRequest) {
         `金额: ${order.currency} ${order.total_price}\n` +
         `状态: ${order.financial_status}`
       );
+
+      // 实时累加当日 KPI（供 Observer 检测趋势）
+      const kpiToday   = new Date(); kpiToday.setHours(0, 0, 0, 0);
+      const kpiDateStr = kpiToday.toISOString().split("T")[0];
+      const price      = parseFloat(order.total_price) || 0;
+      const FURMATES   = "cmo21zrhg00039rvsd6ay6ag0";
+
+      await Promise.all([
+        prisma.kpiSnapshot.upsert({
+          where:  { id: `shopify_shopify_orders_${kpiDateStr}` },
+          create: {
+            id: `shopify_shopify_orders_${kpiDateStr}`,
+            date:      kpiToday,
+            projectId: FURMATES,
+            source:    "shopify",
+            metric:    "shopify_orders",
+            value:     1,
+            metadata:  JSON.stringify({ source: "webhook_realtime" }),
+          },
+          update: { value: { increment: 1 } },
+        }),
+        prisma.kpiSnapshot.upsert({
+          where:  { id: `shopify_shopify_revenue_${kpiDateStr}` },
+          create: {
+            id: `shopify_shopify_revenue_${kpiDateStr}`,
+            date:      kpiToday,
+            projectId: FURMATES,
+            source:    "shopify",
+            metric:    "shopify_revenue",
+            value:     price,
+            metadata:  JSON.stringify({ source: "webhook_realtime" }),
+          },
+          update: { value: { increment: price } },
+        }),
+      ]).catch((err) => console.error("[Shopify] KPI upsert failed:", err));
+
       break;
     }
 

@@ -139,7 +139,7 @@ export async function GET(req: NextRequest) {
     // 同步 Shopify KPI（FurMates）
     try {
       console.log(`[Cron Daily] 开始同步 Shopify KPI...`);
-      await syncShopifyKpis("proj_furmates");
+      await syncShopifyKpis("cmo21zrhg00039rvsd6ay6ag0");
       kpiStatus.shopify = { ok: true };
       console.log(`[Cron Daily] Shopify KPI 同步成功`);
     } catch (err) {
