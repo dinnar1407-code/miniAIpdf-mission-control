@@ -1,6 +1,7 @@
 import { PrismaClient, PlanStatus, type Mission } from "@prisma/client";
 import { executeWorkflow }             from "@/lib/workflow-engine";
 import type { WorkflowStep }           from "@/lib/workflow-types";
+import { sendTelegram }                from "@/lib/telegram";
 
 const prisma = new PrismaClient();
 
@@ -127,6 +128,32 @@ export async function createMissionFromPlan(planId: string): Promise<Mission> {
       : []
     ),
   ]);
+
+  // 9. Notify Telegram on terminal status (fire-and-forget)
+  if (missionStatus === "succeeded" || missionStatus === "failed") {
+    const icon     = missionStatus === "succeeded" ? "✅" : "❌";
+    const dur      = updatedMission.completedAt && updatedMission.startedAt
+      ? `${Math.round((updatedMission.completedAt.getTime() - updatedMission.startedAt.getTime()) / 6000) / 10} min`
+      : "—";
+    const stepCount = plan.steps.length;
+    const succeeded = missionStatus === "succeeded"
+      ? JSON.parse(finalRun.stepResults || "[]").filter((s: { status: string }) => s.status === "completed").length
+      : 0;
+
+    const lines = [
+      `${icon} *Mission ${missionStatus === "succeeded" ? "完成" : "失败"}*`,
+      ``,
+      `📁 项目: ${plan.project.name}`,
+      `🎯 目标: ${plan.objective.slice(0, 100)}${plan.objective.length > 100 ? "…" : ""}`,
+      `⏱ 耗时: ${dur}`,
+      missionStatus === "succeeded"
+        ? `✅ 步骤: ${succeeded}/${stepCount} 完成`
+        : `❌ 错误: ${(errorMessage ?? "未知错误").slice(0, 150)}`,
+      ``,
+      `\`${missionId}\``,
+    ];
+    void sendTelegram(lines.join("\n"));
+  }
 
   return updatedMission;
 }
