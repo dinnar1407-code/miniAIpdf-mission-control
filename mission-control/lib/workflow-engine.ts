@@ -46,13 +46,20 @@ async function executeStep(
       const agentId = step.agent || "playfish";
       const action  = step.action || "完成分配的任务";
 
+      // Resolve DB primary key for AgentMemory FK (agentId above is the name/slug)
+      const agentRecord = await prisma.agent.findFirst({
+        where:  { name: agentId },
+        select: { id: true },
+      });
+      const agentDbId = agentRecord?.id ?? agentId;
+
       // Refresh lastActiveAt so admin UI shows when this agent was last used
-      if (step.agent) {
-        await prisma.agent.updateMany({
-          where: { name: step.agent },
+      if (agentRecord) {
+        await prisma.agent.update({
+          where: { id: agentDbId },
           data:  { lastActiveAt: new Date() },
         }).catch((e) => {
-          console.warn(`Failed to update lastActiveAt for agent ${step.agent}:`, e);
+          console.warn(`Failed to update lastActiveAt for agent ${agentId}:`, e);
         });
       }
 
@@ -63,7 +70,7 @@ async function executeStep(
       const agentModel   = getAgentModel(agentId);
 
       // 执行前：获取 Agent 记忆上下文
-      const memoryContext = await getAgentMemoryContext(agentId, projectId);
+      const memoryContext = await getAgentMemoryContext(agentDbId, projectId);
 
       let userMessage = prevOutput
         ? `上一步输出：\n${prevOutput}\n\n当前任务：${action}`
@@ -121,7 +128,7 @@ async function executeStep(
       }
 
       // 执行后：从输出中提取并保存记忆
-      void extractAndSaveMemory(agentId, output, action, projectId);
+      void extractAndSaveMemory(agentDbId, output, action, projectId);
 
       const preview = output.length > 200 ? output.slice(0, 200) + "..." : output;
       await addLog(runId, index, step.type, `✓ ${agentId} 完成 | ${preview}`, "success");
