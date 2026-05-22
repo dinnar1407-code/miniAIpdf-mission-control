@@ -1,7 +1,7 @@
 // 微信公众号 — 完整发布流程
 // 支持：纯文字图文 / 带封面图图文 / 草稿模式 / 群发模式
 import { BaseChannelAdapter } from "./base";
-import { ChannelConfig, PublishContent, PublishResult } from "../types";
+import { ChannelConfig, ContentType, PublishContent, PublishResult } from "../types";
 
 // access_token 模块级缓存（key = appId）— 用于 getAccessToken()
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
