@@ -95,7 +95,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // ---- MANUAL INSIGHT: /report <project> <summary> ----
     // Example: /report wheatcoin 本周转化率下降，怀疑是定价问题
-    const reportMatch = text.match(/^\/report\s+(\S+)\s+(.+)$/is);
+    const reportMatch = text.match(/^\/report\s+(\S+)\s+([\s\S]+)$/i);
     if (reportMatch) {
       const slug    = reportMatch[1].toLowerCase();
       const summary = reportMatch[2].trim();
