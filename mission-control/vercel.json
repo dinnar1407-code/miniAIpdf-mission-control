@@ -5,6 +5,6 @@
     { "path": "/api/cron/social", "schedule": "0 10 * * *"  },
     { "path": "/api/cron/weekly", "schedule": "0 3 * * *"   }
   ],
-  "buildCommand": "npx prisma generate && next build",
+  "buildCommand": "npx prisma migrate deploy && npx prisma generate && next build",
   "installCommand": "npm install && npx prisma generate"
 }
