@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { _testOnly_getAccessToken as getAccessToken } from "@/lib/channels/adapters/wechat";
 
 const WX_BASE = "https://api.weixin.qq.com";
 
@@ -19,18 +20,12 @@ export async function GET() {
     const { appId, appSecret } = JSON.parse(cred.credentials) as { appId?: string; appSecret?: string };
     if (!appId || !appSecret) return NextResponse.json({ error: "凭证不完整" }, { status: 400 });
 
-    // 获取 access_token
-    const tokenRes = await fetch(
-      `${WX_BASE}/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`
-    );
-    const tokenData = await tokenRes.json() as { access_token?: string; errcode?: number; errmsg?: string };
-    if (!tokenData.access_token) {
-      return NextResponse.json({ error: `获取 token 失败：[${tokenData.errcode}] ${tokenData.errmsg}` }, { status: 400 });
-    }
+    // 复用带 DB 缓存的 getAccessToken，避免重复请求微信 API
+    const accessToken = await getAccessToken(appId, appSecret);
 
     // 拉取永久图片素材列表（最多 20 条）
     const matRes = await fetch(
-      `${WX_BASE}/cgi-bin/material/batchget_material?access_token=${tokenData.access_token}`,
+      `${WX_BASE}/cgi-bin/material/batchget_material?access_token=${accessToken}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

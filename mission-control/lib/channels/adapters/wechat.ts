@@ -2,8 +2,9 @@
 // 支持：纯文字图文 / 带封面图图文 / 草稿模式 / 群发模式
 import { BaseChannelAdapter } from "./base";
 import { ChannelConfig, ContentType, PublishContent, PublishResult } from "../types";
+import { prisma } from "@/lib/db";
 
-// access_token 模块级缓存（key = appId）— 用于 getAccessToken()
+// access_token 模块级内存缓存（key = appId）— 实例内热路径，DB 缓存是跨实例持久层
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 // 微信 API 基址
@@ -19,11 +20,20 @@ interface WxTokenResponse {
 }
 
 async function getAccessToken(appId: string, appSecret: string): Promise<string> {
+  // 1. 内存缓存（同一实例内最快）
   const cached = tokenCache.get(appId);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.token;
   }
 
+  // 2. DB 缓存（跨实例共享，避免频繁请求微信 API 触发 IP 校验）
+  const dbToken = await prisma.wechatToken.findUnique({ where: { appId } });
+  if (dbToken && dbToken.expiresAt > new Date()) {
+    tokenCache.set(appId, { token: dbToken.accessToken, expiresAt: dbToken.expiresAt.getTime() });
+    return dbToken.accessToken;
+  }
+
+  // 3. 调微信 API 刷新 token
   const url = `${WX_BASE}/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`;
   const res = await fetch(url).catch(() => {
     throw new Error("获取 access_token 失败：网络请求错误");
@@ -37,11 +47,18 @@ async function getAccessToken(appId: string, appSecret: string): Promise<string>
     throw new Error(`获取 access_token 失败：[${data.errcode}] ${data.errmsg}`);
   }
 
-  // 提前 5 分钟刷新，避免边界过期
-  tokenCache.set(appId, {
-    token: data.access_token,
-    expiresAt: Date.now() + ((data.expires_in ?? 7200) - 300) * 1000,
+  // 提前 5 分钟过期，避免边界竞争
+  const expiresAt = new Date(Date.now() + ((data.expires_in ?? 7200) - 300) * 1000);
+
+  // 写入 DB 缓存
+  await prisma.wechatToken.upsert({
+    where:  { appId },
+    create: { appId, accessToken: data.access_token, expiresAt },
+    update: { accessToken: data.access_token, expiresAt, updatedAt: new Date() },
   });
+
+  // 同步更新内存缓存
+  tokenCache.set(appId, { token: data.access_token, expiresAt: expiresAt.getTime() });
 
   return data.access_token;
 }
