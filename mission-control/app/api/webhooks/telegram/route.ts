@@ -64,8 +64,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       // Parse key=value pairs (supports integers and decimals)
-      const pairs = [...kvStr.matchAll(/(\w+)=([\d.]+)/g)];
-      if (pairs.length === 0) {
+      const rawPairs = (kvStr.match(/\w+=[\d.]+/g) ?? [])
+        .map((p) => p.split("=") as [string, string]);
+      if (rawPairs.length === 0) {
         await sendTelegramMessage(
           chatId,
           `❌ 格式错误\n\n示例: /kpi wheatcoin revenue=320 orders=8`
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       await prisma.kpiSnapshot.createMany({
-        data: pairs.map(([, metric, valueStr]) => ({
+        data: rawPairs.map(([metric, valueStr]) => ({
           projectId: project.id,
           source:    "telegram",
           metric,
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         })),
       });
 
-      const lines = pairs.map(([, m, v]) => `  • ${m}: ${v}`).join("\n");
+      const lines = rawPairs.map(([m, v]) => `  • ${m}: ${v}`).join("\n");
       await sendTelegramMessage(
         chatId,
         `✅ *${project.name}* 数据已上报\n${lines}\n\n_Observer 下次运行时自动分析趋势_`
