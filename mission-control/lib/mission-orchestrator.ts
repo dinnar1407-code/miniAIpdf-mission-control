@@ -2,6 +2,7 @@ import { PrismaClient, PlanStatus, type Mission } from "@prisma/client";
 import { executeWorkflow }             from "@/lib/workflow-engine";
 import type { WorkflowStep }           from "@/lib/workflow-types";
 import { sendTelegram }                from "@/lib/telegram";
+import { writeMemory }                 from "@/lib/memory";
 
 const prisma = new PrismaClient();
 
@@ -129,30 +130,65 @@ export async function createMissionFromPlan(planId: string): Promise<Mission> {
     ),
   ]);
 
-  // 9. Notify Telegram on terminal status (fire-and-forget)
+  // 9. Notify Telegram + write Memory on terminal status (fire-and-forget)
   if (missionStatus === "succeeded" || missionStatus === "failed") {
-    const icon     = missionStatus === "succeeded" ? "✅" : "❌";
-    const dur      = updatedMission.completedAt && updatedMission.startedAt
-      ? `${Math.round((updatedMission.completedAt.getTime() - updatedMission.startedAt.getTime()) / 6000) / 10} min`
-      : "—";
-    const stepCount = plan.steps.length;
-    const succeeded = missionStatus === "succeeded"
-      ? JSON.parse(finalRun.stepResults || "[]").filter((s: { status: string }) => s.status === "completed").length
+    const icon      = missionStatus === "succeeded" ? "✅" : "❌";
+    const durationMs = updatedMission.completedAt && updatedMission.startedAt
+      ? updatedMission.completedAt.getTime() - updatedMission.startedAt.getTime()
       : 0;
+    const durMin    = Math.round(durationMs / 6000) / 10;
+    const stepCount = plan.steps.length;
+    const stepResults: { status: string }[] = JSON.parse(finalRun.stepResults || "[]");
+    const succeededSteps = stepResults.filter(s => s.status === "completed").length;
 
     const lines = [
       `${icon} *Mission ${missionStatus === "succeeded" ? "完成" : "失败"}*`,
       ``,
       `📁 项目: ${plan.project.name}`,
       `🎯 目标: ${plan.objective.slice(0, 100)}${plan.objective.length > 100 ? "…" : ""}`,
-      `⏱ 耗时: ${dur}`,
+      `⏱ 耗时: ${durMin > 0 ? `${durMin} min` : "—"}`,
       missionStatus === "succeeded"
-        ? `✅ 步骤: ${succeeded}/${stepCount} 完成`
+        ? `✅ 步骤: ${succeededSteps}/${stepCount} 完成`
         : `❌ 错误: ${(errorMessage ?? "未知错误").slice(0, 150)}`,
       ``,
       `\`${missionId}\``,
     ];
     void sendTelegram(lines.join("\n"));
+
+    // Write cross-project learning memory
+    const stepSummary = plan.steps
+      .slice(0, 5)
+      .map((s, i) => `${i + 1}. ${s.action.slice(0, 80)}`)
+      .join("; ");
+
+    const memContent = missionStatus === "succeeded"
+      ? `[Project: ${plan.project.name}] Mission succeeded: ${plan.objective}. ` +
+        `Steps (${stepCount}): ${stepSummary}. ` +
+        `Duration: ${durMin} min. Risk: ${plan.riskLevel}/5, ${plan.reversibility}.` +
+        (resultSummary ? ` Result: ${resultSummary.slice(0, 200)}` : "")
+      : `[Project: ${plan.project.name}] Mission failed: ${plan.objective}. ` +
+        `Steps attempted (${succeededSteps}/${stepCount}): ${stepSummary}. ` +
+        `Error: ${(errorMessage ?? "unknown").slice(0, 200)}. ` +
+        `Risk: ${plan.riskLevel}/5, ${plan.reversibility}.`;
+
+    void writeMemory({
+      projectId:   plan.projectId,
+      kind:        missionStatus === "succeeded" ? "feedback_lesson" : "postmortem",
+      content:     memContent,
+      sourceTable: "mission",
+      sourceId:    missionId,
+      metadata: {
+        planId:        plan.id,
+        objective:     plan.objective,
+        riskLevel:     plan.riskLevel,
+        reversibility: plan.reversibility,
+        status:        missionStatus,
+        effectiveness: missionStatus === "succeeded" ? 1.0 : 0.0,
+        stepCount,
+        succeededSteps,
+        durationMin:   durMin,
+      },
+    }).catch(err => console.error("[Mission] writeMemory failed:", err));
   }
 
   return updatedMission;
