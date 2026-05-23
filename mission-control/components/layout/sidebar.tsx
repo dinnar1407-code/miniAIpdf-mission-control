@@ -48,9 +48,8 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-4 border-b border-[#2A2A3A]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6]">
-            {/* TODO: replace with <img src="/logo.png" /> once icon is provided */}
-            <span className="text-sm">🌾</span>
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+            <img src="/logo.png" alt="JarMC" className="w-full h-full object-cover" />
           </div>
           <div>
             <div className="text-sm font-semibold text-white">JarMC</div>
