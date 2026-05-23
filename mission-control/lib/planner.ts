@@ -169,12 +169,15 @@ export async function planFromInsight(
     return { plan: dryPlan, memoryIdsUsed: memoryHits.map((h) => h.id) };
   }
 
-  // 13. Determine approval requirement
-  const requireApproval = needsApproval({
-    riskLevel:     planOutput.riskLevel,
-    reversibility: planOutput.reversibility as Reversibility,
-    blastRadius:   planOutput.blastRadius,
-  });
+  // 13. Determine approval requirement — use project's configured trust threshold
+  const requireApproval = needsApproval(
+    {
+      riskLevel:     planOutput.riskLevel,
+      reversibility: planOutput.reversibility as Reversibility,
+      blastRadius:   planOutput.blastRadius,
+    },
+    insight.project?.autoApproveThreshold ?? 1
+  );
 
   // 14. Atomic write
   const { plan, steps } = await prisma.$transaction(async (tx) => {

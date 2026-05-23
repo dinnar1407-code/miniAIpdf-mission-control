@@ -16,8 +16,9 @@ model Project {
   description String?
   color       String   @default("#3B82F6")
   emoji       String   @default("📦")
-  status      String   @default("active")
-  createdAt   DateTime @default(now())
+  status               String   @default("active")
+  autoApproveThreshold Int      @default(1)
+  createdAt            DateTime @default(now())
 
   tasks            Task[]
   content          ContentItem[]

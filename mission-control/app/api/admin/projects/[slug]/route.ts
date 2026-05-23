@@ -11,11 +11,12 @@ const fail = (error: string, status: number, code?: string) =>
   NextResponse.json({ ok: false, error, ...(code ? { code } : {}) }, { status });
 
 const ProjectPatch = z.object({
-  name:        z.string().min(1).max(100).optional(),
-  description: z.string().nullable().optional(),
-  color:       z.string().optional(),
-  emoji:       z.string().optional(),
-  status:      z.string().optional(),
+  name:                 z.string().min(1).max(100).optional(),
+  description:          z.string().nullable().optional(),
+  color:                z.string().optional(),
+  emoji:                z.string().optional(),
+  status:               z.string().optional(),
+  autoApproveThreshold: z.number().int().min(0).max(5).optional(),
 });
 
 export async function GET(

@@ -19,6 +19,13 @@ const PROJECTS = [
   { name: "Dinnar",       slug: "dinnar",       emoji: "🏭", color: "#EF4444", status: "active", description: "Industrial operations",           agents: ["Wheat.AI"] },
 ];
 
+interface DbProject {
+  id: string; name: string; slug: string; description: string | null;
+  color: string; emoji: string; status: string;
+  autoApproveThreshold: number;
+  agentAssignments: { agent: { name: string } }[];
+}
+
 interface ApiKeyRecord {
   id: string; name: string; permissions: string;
   active: boolean; lastUsedAt: string | null; createdAt: string; key?: string;
@@ -557,9 +564,9 @@ function TelegramNotifyCard() {
 
 // ── Main Settings Page ─────────────────────────────────────────
 export default function SettingsPage() {
-  const [tab, setTab]         = useState<Tab>("channels");
-  const [projects]            = useState(PROJECTS);
-  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [tab, setTab]           = useState<Tab>("channels");
+  const [projects, setProjects] = useState<DbProject[]>([]);
+  const [apiKeys, setApiKeys]   = useState<ApiKeyRecord[]>([]);
   const [channels, setChannels] = useState<ChannelRecord[]>([]);
   const [newKeyName, setNewKeyName]   = useState("");
   const [newKeyPerms, setNewKeyPerms] = useState("write");
@@ -570,7 +577,18 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch("/api/api-keys").then(r => r.ok ? r.json() : []).then(setApiKeys);
     fetch("/api/settings/channels").then(r => r.ok ? r.json() : []).then(setChannels);
+    fetch("/api/projects").then(r => r.ok ? r.json() : []).then(setProjects);
   }, []);
+
+  const updateTrustThreshold = async (slug: string, threshold: number) => {
+    // Optimistic update
+    setProjects(ps => ps.map(p => p.slug === slug ? { ...p, autoApproveThreshold: threshold } : p));
+    await fetch(`/api/admin/projects/${slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoApproveThreshold: threshold }),
+    });
+  };
 
   // API Keys
   const createKey = async () => {
@@ -814,31 +832,57 @@ export default function SettingsPage() {
                 <Plus size={13} /> {t.settingsAddProject}
               </button>
             </div>
-            {projects.map(p => (
-              <div key={p.slug} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0"
-                    style={{ backgroundColor: `${p.color}20` }}>{p.emoji}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-white">{p.name}</span>
-                      <span className="text-xs text-[#5A5A6E]">/{p.slug}</span>
-                      <span className="text-xs bg-[#10B98115] text-[#10B981] px-1.5 py-0.5 rounded ml-auto">{p.status}</span>
+            {projects.length === 0 && (
+              <div className="text-xs text-[#5A5A6E] text-center py-8">加载项目中…</div>
+            )}
+            {projects.map(p => {
+              const agents = p.agentAssignments.map(a => a.agent.name);
+              const threshold = p.autoApproveThreshold;
+              const trustLabel = ["不自动批准", "保守 (≤1)", "正常 (≤2)", "宽松 (≤3)", "高度信任 (≤4)", "完全自主"][threshold] ?? String(threshold);
+              const trustColor = threshold <= 1 ? "#8B8B9E" : threshold <= 2 ? "#F59E0B" : threshold <= 3 ? "#10B981" : "#3B82F6";
+              return (
+                <div key={p.slug} className="bg-[#12121A] border border-[#2A2A3A] rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl flex-shrink-0"
+                      style={{ backgroundColor: `${p.color}20` }}>{p.emoji}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-white">{p.name}</span>
+                        <span className="text-xs text-[#5A5A6E]">/{p.slug}</span>
+                        <span className="text-xs bg-[#10B98115] text-[#10B981] px-1.5 py-0.5 rounded ml-auto">{p.status}</span>
+                      </div>
+                      <div className="text-xs text-[#8B8B9E] mt-0.5">{p.description}</div>
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {agents.map(a => (
+                          <span key={a} className="text-xs bg-[#1A1A24] text-[#5A5A6E] px-2 py-0.5 rounded">{a}</span>
+                        ))}
+                      </div>
+                      {/* Trust boundary slider */}
+                      <div className="mt-3 pt-3 border-t border-[#2A2A3A]">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs text-[#8B8B9E]">🔒 自动批准阈值</span>
+                          <span className="text-xs font-medium" style={{ color: trustColor }}>{trustLabel}</span>
+                        </div>
+                        <input
+                          type="range" min={0} max={5} step={1}
+                          value={threshold}
+                          onChange={e => updateTrustThreshold(p.slug, Number(e.target.value))}
+                          className="w-full h-1 rounded-full appearance-none cursor-pointer"
+                          style={{ accentColor: trustColor }}
+                        />
+                        <div className="flex justify-between text-[10px] text-[#5A5A6E] mt-1">
+                          <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-[#8B8B9E] mt-0.5">{p.description}</div>
-                    <div className="flex gap-1 mt-1.5 flex-wrap">
-                      {p.agents.map(a => (
-                        <span key={a} className="text-xs bg-[#1A1A24] text-[#5A5A6E] px-2 py-0.5 rounded">{a}</span>
-                      ))}
+                    <div className="flex gap-1 flex-shrink-0 self-start">
+                      <button className="p-1.5 rounded-md text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24]"><Edit2 size={13} /></button>
+                      <button className="p-1.5 rounded-md text-[#5A5A6E] hover:text-yellow-400 hover:bg-[#1A1A24]"><Archive size={13} /></button>
                     </div>
-                  </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <button className="p-1.5 rounded-md text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24]"><Edit2 size={13} /></button>
-                    <button className="p-1.5 rounded-md text-[#5A5A6E] hover:text-yellow-400 hover:bg-[#1A1A24]"><Archive size={13} /></button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
