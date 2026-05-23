@@ -14,12 +14,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Jarvis Mission Control",
+  title: "JarMC",
   description: "Playfish Universal AI Agent Orchestration Platform",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Jarvis",
+    title: "JarMC",
   },
   icons: {
     apple: "/icon-192.png",
@@ -36,7 +36,7 @@ export default function RootLayout({
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Jarvis" />
+        <meta name="apple-mobile-web-app-title" content="JarMC" />
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="manifest" href="/manifest.webmanifest" />

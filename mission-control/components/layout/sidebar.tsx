@@ -48,11 +48,12 @@ export function Sidebar() {
       {/* Logo */}
       <div className="p-4 border-b border-[#2A2A3A]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6] rounded-lg flex items-center justify-center text-sm">
-            🌾
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-to-br from-[#3B82F6] to-[#8B5CF6]">
+            {/* TODO: replace with <img src="/logo.png" /> once icon is provided */}
+            <span className="text-sm">🌾</span>
           </div>
           <div>
-            <div className="text-sm font-semibold text-white">Mission Ctrl</div>
+            <div className="text-sm font-semibold text-white">JarMC</div>
             <div className="text-xs text-[#5A5A6E]">Playfish Platform</div>
           </div>
         </div>
