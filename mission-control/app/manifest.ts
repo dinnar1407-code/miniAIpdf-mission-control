@@ -2,9 +2,9 @@ import { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Jarvis Mission Control",
-    short_name: "Jarvis",
-    description: "Playfish Universal AI Agent Orchestration Platform",
+    name: "JarMC",
+    short_name: "JarMC",
+    description: "Wheat.AI Universal AI Agent Orchestration Platform",
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

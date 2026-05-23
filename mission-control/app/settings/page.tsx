@@ -11,12 +11,12 @@ import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────
 const PROJECTS = [
-  { name: "MiniAIPDF",    slug: "miniaipdf",    emoji: "📄", color: "#3B82F6", status: "active", description: "AI-powered PDF SaaS tool",        agents: ["Playfish","PM01","Admin01","DFM"] },
-  { name: "FurMates",     slug: "furmales",     emoji: "🛒", color: "#10B981", status: "active", description: "Pet supplies e-commerce",          agents: ["Playfish","PM01","Admin01"] },
-  { name: "NIW",          slug: "niw",          emoji: "📝", color: "#F59E0B", status: "active", description: "National Interest Waiver petition", agents: ["Playfish","Admin01"] },
+  { name: "MiniAIPDF",    slug: "miniaipdf",    emoji: "📄", color: "#3B82F6", status: "active", description: "AI-powered PDF SaaS tool",        agents: ["Wheat.AI","PM01","Admin01","DFM"] },
+  { name: "FurMates",     slug: "furmales",     emoji: "🛒", color: "#10B981", status: "active", description: "Pet supplies e-commerce",          agents: ["Wheat.AI","PM01","Admin01"] },
+  { name: "NIW",          slug: "niw",          emoji: "📝", color: "#F59E0B", status: "active", description: "National Interest Waiver petition", agents: ["Wheat.AI","Admin01"] },
   { name: "Talengineer",  slug: "talengineer",  emoji: "🔧", color: "#8B5CF6", status: "active", description: "Engineering talent matchmaker",    agents: ["Admin01"] },
   { name: "wheatcoin",    slug: "wheatcoin",    emoji: "🪙", color: "#F97316", status: "active", description: "Crypto community & SDK",           agents: ["DFM","Admin01"] },
-  { name: "Dinnar",       slug: "dinnar",       emoji: "🏭", color: "#EF4444", status: "active", description: "Industrial operations",           agents: ["Playfish"] },
+  { name: "Dinnar",       slug: "dinnar",       emoji: "🏭", color: "#EF4444", status: "active", description: "Industrial operations",           agents: ["Wheat.AI"] },
 ];
 
 interface ApiKeyRecord {
@@ -689,7 +689,7 @@ export default function SettingsPage() {
                 { label: "ANTHROPIC_API_KEY",        value: t.settingsAIApiKeyConfig,                  sub: "Settings → Environment Variables → ANTHROPIC_API_KEY" },
                 { label: t.settingsAIDefaultModel,   value: "claude-haiku-4-5-20251001",               sub: t.settingsAIDefaultModelSub },
                 { label: t.settingsAIFallback,       value: t.settingsAIFallbackValue,                 sub: t.settingsAIFallbackSub },
-                { label: t.settingsAIAgents,         value: "Playfish · PM01 · DFM · Admin01 · PM01-B", sub: t.settingsAIAgentsSub },
+                { label: t.settingsAIAgents,         value: "Wheat.AI · PM01 · DFM · Admin01 · PM01-B", sub: t.settingsAIAgentsSub },
               ].map(item => (
                 <div key={item.label} className="px-4 py-3">
                   <div className="flex items-start justify-between gap-4">

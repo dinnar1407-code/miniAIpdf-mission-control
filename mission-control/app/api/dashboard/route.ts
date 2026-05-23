@@ -156,7 +156,7 @@ export async function GET() {
 
 function agentEmoji(name: string) {
   const map: Record<string, string> = {
-    Playfish: "🌾", PM01: "📝", "Admin01": "🔧", DFM: "📊", "PM01-B": "✍️",
+    "Wheat.AI": "🌾", Playfish: "🌾", PM01: "📝", "Admin01": "🔧", DFM: "📊", "PM01-B": "✍️",
   };
   return map[name] || "🤖";
 }

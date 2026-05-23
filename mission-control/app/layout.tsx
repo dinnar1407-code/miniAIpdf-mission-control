@@ -15,7 +15,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "JarMC",
-  description: "Playfish Universal AI Agent Orchestration Platform",
+  description: "Wheat.AI Universal AI Agent Orchestration Platform",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

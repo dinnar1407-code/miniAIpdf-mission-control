@@ -53,7 +53,7 @@ export function Sidebar() {
           </div>
           <div>
             <div className="text-sm font-semibold text-white">JarMC</div>
-            <div className="text-xs text-[#5A5A6E]">Playfish Platform</div>
+            <div className="text-xs text-[#5A5A6E]">Wheat.AI Platform</div>
           </div>
         </div>
       </div>
@@ -112,7 +112,7 @@ export function Sidebar() {
         <div className="text-xs text-[#5A5A6E] mb-2">{t.navAgentStatus}</div>
         <div className="space-y-1.5">
           {[
-            { name: "Playfish", status: "active", emoji: "🌾" },
+            { name: "Wheat.AI", status: "active", emoji: "🌾" },
             { name: "PM01", status: "active", emoji: "📝" },
             { name: "Admin01", status: "active", emoji: "🔧" },
             { name: "DFM", status: "idle", emoji: "📊" },

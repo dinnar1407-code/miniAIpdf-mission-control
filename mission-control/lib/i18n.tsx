@@ -56,7 +56,7 @@ const zh = {
   loginErrorNetwork: '网络错误',
 
   // Dashboard
-  dashSubtitle:         'Playfish Universal Platform · All Projects',
+  dashSubtitle:         'Wheat.AI Universal Platform · All Projects',
   dashWeeklyWorkflows:  '本周 Workflows',
   dashDoneTriggered:    '完成 / 触发',
   dashContentPublished: '内容已发布',
@@ -174,8 +174,8 @@ const zh = {
   settingsRevoke:             '撤销',
   settingsNoApiKeys:          '暂无 API Key',
   settingsKeyCreated:         '✓ Key 已创建 — 请立即复制，不会再次显示',
-  settingsKeyNamePlaceholder: 'Key 名称 (如: Playfish Agent)',
-  settingsApiKeyDesc:         '用于 Playfish Agent 和外部集成',
+  settingsKeyNamePlaceholder: 'Key 名称 (如: Wheat.AI Agent)',
+  settingsApiKeyDesc:         '用于 Wheat.AI Agent 和外部集成',
   settingsRevokedBadge:       '已撤销',
   settingsCreatedAt:          '创建于',
   settingsLastUsed:           '· 最近使用',
@@ -262,7 +262,7 @@ const zh = {
   planDecisionBy:         (by: string) => `由 ${by} 于`,
 
   // Dashboard extras
-  dashTitle:           'Mission Ctrl',
+  dashTitle:           'J.A.R.V.I.S',
   dashLive:            '实时',
   dashMRR:             '全项目 MRR',
   dashAllPlatforms:    '全渠道',
@@ -571,7 +571,7 @@ const en: typeof zh = {
   loginErrorToken:   'Invalid token',
   loginErrorNetwork: 'Network error',
 
-  dashSubtitle:         'Playfish Universal Platform · All Projects',
+  dashSubtitle:         'Wheat.AI Universal Platform · All Projects',
   dashWeeklyWorkflows:  'Workflows This Week',
   dashDoneTriggered:    'Done / Triggered',
   dashContentPublished: 'Content Published',
@@ -683,8 +683,8 @@ const en: typeof zh = {
   settingsRevoke:             'Revoke',
   settingsNoApiKeys:          'No API Keys',
   settingsKeyCreated:         "✓ Key created — copy now, it won't be shown again",
-  settingsKeyNamePlaceholder: 'Key name (e.g. Playfish Agent)',
-  settingsApiKeyDesc:         'For Playfish Agent and external integrations',
+  settingsKeyNamePlaceholder: 'Key name (e.g. Wheat.AI Agent)',
+  settingsApiKeyDesc:         'For Wheat.AI Agent and external integrations',
   settingsRevokedBadge:       'Revoked',
   settingsCreatedAt:          'Created',
   settingsLastUsed:           '· Last used',
@@ -771,7 +771,7 @@ const en: typeof zh = {
   planDecisionBy:         (by: string) => `Decided by ${by} at`,
 
   // Dashboard extras
-  dashTitle:           'Mission Ctrl',
+  dashTitle:           'J.A.R.V.I.S',
   dashLive:            'Live',
   dashMRR:             'MRR across projects',
   dashAllPlatforms:    'All platforms',

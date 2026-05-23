@@ -29,7 +29,7 @@ const PROJECTS = [
 ];
 
 const AGENTS = [
-  { id: "playfish", name: "Playfish", emoji: "🌾" },
+  { id: "playfish", name: "Wheat.AI", emoji: "🌾" },
   { id: "pm01", name: "PM01", emoji: "📝" },
   { id: "admin01", name: "Admin01", emoji: "🔧" },
   { id: "dfm", name: "DFM", emoji: "📊" },

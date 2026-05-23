@@ -159,7 +159,7 @@ export const STEP_ICONS: Record<StepType, string> = {
 };
 
 export const AGENT_OPTIONS = [
-  { id: "playfish", name: "Playfish", emoji: "🌾" },
+  { id: "playfish", name: "Wheat.AI", emoji: "🌾" },
   { id: "pm01", name: "PM01", emoji: "📝" },
   { id: "pm01-b", name: "PM01-B", emoji: "📝" },
   { id: "admin01", name: "Admin01", emoji: "🔧" },
