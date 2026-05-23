@@ -324,3 +324,82 @@ export async function syncGAKpis(projectId: string | null = null): Promise<void>
     console.error('Error syncing GA4 KPIs:', error);
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Realtime API — active users in the last 30 minutes
+// ─────────────────────────────────────────────────────────────
+
+export interface GARealtimeMetrics {
+  activeUsers: number;
+  screenPageViews: number;
+}
+
+interface GA4RealtimeResponse {
+  rows?: Array<{ metricValues: Array<{ value: string }> }>;
+  totals?: Array<{ metricValues: Array<{ value: string }> }>;
+}
+
+export async function fetchGARealtimeMetrics(): Promise<GARealtimeMetrics> {
+  const empty: GARealtimeMetrics = { activeUsers: 0, screenPageViews: 0 };
+  if (!validateGA4Config()) return empty;
+
+  const accessToken = await getGoogleAccessToken();
+  if (!accessToken) return empty;
+
+  try {
+    const propertyId = process.env.GA_PROPERTY_ID!;
+    const res = await fetch(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runRealtimeReport`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }],
+        }),
+      }
+    );
+    if (!res.ok) throw new Error(`GA4 Realtime error: ${res.statusText}`);
+    const data = await res.json() as GA4RealtimeResponse;
+    const vals = data.totals?.[0]?.metricValues;
+    if (!vals) return empty;
+    return {
+      activeUsers:     parseInt(vals[0]?.value ?? '0', 10),
+      screenPageViews: parseInt(vals[1]?.value ?? '0', 10),
+    };
+  } catch (err) {
+    console.error('Error fetching GA4 realtime metrics:', err);
+    return empty;
+  }
+}
+
+/**
+ * Upserts hourly realtime KPI snapshots.
+ * Returns the stored activeUsers value so callers can do anomaly detection.
+ */
+export async function syncGARealtimeKpis(projectId: string | null = null): Promise<number> {
+  const metrics = await fetchGARealtimeMetrics();
+  if (!metrics.activeUsers && !metrics.screenPageViews) return 0;
+
+  // Hourly bucket: one row per hour, upsert on conflict
+  const now = new Date();
+  const hourBucket = new Date(now);
+  hourBucket.setMinutes(0, 0, 0);
+  const hourStr = hourBucket.toISOString().slice(0, 13); // "2026-05-23T09"
+  const usersId = `ga_rt_users_${hourStr}`;
+  const viewsId = `ga_rt_views_${hourStr}`;
+
+  await Promise.all([
+    prisma.kpiSnapshot.upsert({
+      where:  { id: usersId },
+      create: { id: usersId, date: hourBucket, projectId, source: 'ga4_realtime', metric: 'ga_realtime_users', value: metrics.activeUsers },
+      update: { value: metrics.activeUsers },
+    }),
+    prisma.kpiSnapshot.upsert({
+      where:  { id: viewsId },
+      create: { id: viewsId, date: hourBucket, projectId, source: 'ga4_realtime', metric: 'ga_realtime_pageviews', value: metrics.screenPageViews },
+      update: { value: metrics.screenPageViews },
+    }),
+  ]);
+
+  return metrics.activeUsers;
+}
