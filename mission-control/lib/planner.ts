@@ -9,6 +9,7 @@ import { PlanOutputSchema }               from "@/lib/planner-schema";
 import { needsApproval }                  from "@/lib/approval-policy";
 import { inngest }                        from "@/inngest/client";
 import { createMissionFromPlan }          from "@/lib/mission-orchestrator";
+import { sendTelegramWithButtons }        from "@/lib/telegram";
 
 const prisma = new PrismaClient();
 
@@ -235,7 +236,25 @@ export async function planFromInsight(
     return { plan, steps };
   });
 
-  // 15. Trigger Mission on auto-approve — direct call + optional Inngest notification
+  // 15. Notify Telegram when Plan needs human approval (fire-and-forget)
+  if (requireApproval) {
+    const stepLines = steps.slice(0, 3)
+      .map((s, i) => `${i + 1}. ${s.action.slice(0, 55)}${s.action.length > 55 ? "…" : ""}`)
+      .join("\n");
+    void sendTelegramWithButtons(
+      `🔔 *新 Plan 需要审批*\n\n` +
+      `📁 *${insight.project?.name ?? insight.projectId}*\n` +
+      `🎯 ${planOutput.objective.slice(0, 100)}${planOutput.objective.length > 100 ? "…" : ""}\n` +
+      `⚠️ 风险: ${planOutput.riskLevel}/5 | 可逆: ${planOutput.reversibility}\n\n` +
+      `*步骤 (${steps.length}个):*\n${stepLines}${steps.length > 3 ? "\n…" : ""}`,
+      [[
+        { text: "✅ 批准执行", callback_data: `plan_approve:${plan.id}` },
+        { text: "❌ 拒绝",     callback_data: `plan_reject:${plan.id}`  },
+      ]]
+    );
+  }
+
+  // 16. Trigger Mission on auto-approve — direct call + optional Inngest notification
   if (!requireApproval) {
     void createMissionFromPlan(plan.id).catch((err) =>
       console.error("Auto-approve Mission creation failed:", String(err))
@@ -243,10 +262,10 @@ export async function planFromInsight(
     void inngest.send({ name: "autopilot/plans.approved", data: { planId: plan.id } });
   }
 
-  // 16. markRetrieved outside transaction — failure must not roll back the Plan
+  // 17. markRetrieved outside transaction — failure must not roll back the Plan
   void markRetrieved(memoryHits.map((h) => h.id));
 
-  // 17. Return with refreshed status
+  // 18. Return with refreshed status
   const finalPlan = await prisma.plan.findUniqueOrThrow({ where: { id: plan.id } });
   return { plan: { ...finalPlan, steps }, memoryIdsUsed: memoryHits.map((h) => h.id) };
 }

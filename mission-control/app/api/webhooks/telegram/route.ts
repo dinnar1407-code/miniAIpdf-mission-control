@@ -1,36 +1,130 @@
-import { NextRequest, NextResponse } from "next/server";
-import { handleApprovalResponse, getApprovalRequests } from "@/lib/approval";
-import { prisma } from "@/lib/db";
+import { NextRequest, NextResponse }       from "next/server";
+import { handleApprovalResponse,
+         getApprovalRequests }             from "@/lib/approval";
+import { prisma }                          from "@/lib/db";
+import { planFromInsight }                 from "@/lib/planner";
+import { createMissionFromPlan }           from "@/lib/mission-orchestrator";
+import { answerCallbackQuery,
+         editTelegramMessage }             from "@/lib/telegram";
 
-// Telegram Update types
+export const maxDuration = 60;
+
+// ── Telegram Update 类型 ──────────────────────────────────────────────────────
+
 interface TelegramMessage {
   message_id: number;
-  date: number;
-  chat: { id: number };
-  from?: { id: number; username?: string };
-  text?: string;
+  date:       number;
+  chat:       { id: number };
+  from?:      { id: number; username?: string };
+  text?:      string;
+}
+
+interface TelegramCallbackQuery {
+  id:       string;
+  from:     { id: number; username?: string };
+  message?: { message_id: number; chat: { id: number } };
+  data?:    string;
 }
 
 interface TelegramUpdate {
-  update_id: number;
-  message?: TelegramMessage;
+  update_id:       number;
+  message?:        TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 }
 
 // ==================== WEBHOOK HANDLER ====================
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    // Verify webhook secret token
-    const secretToken = req.headers.get("x-telegram-bot-api-secret-token");
+    // 验证 webhook secret token
+    const secretToken   = req.headers.get("x-telegram-bot-api-secret-token");
     const expectedToken = process.env.TELEGRAM_WEBHOOK_SECRET;
-
     if (!expectedToken || secretToken !== expectedToken) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = (await req.json()) as TelegramUpdate;
 
-    if (!body.message || !body.message.text) {
+    // ── 处理 inline 按钮点击（callback_query）────────────────────────────────
+    if (body.callback_query) {
+      const cq     = body.callback_query;
+      const data   = cq.data ?? "";
+      const cbChat = cq.message?.chat.id;
+      const msgId  = cq.message?.message_id;
+      const cbUser = cq.from?.username ?? "telegram_user";
+
+      // 必须在 10s 内 answer，否则 Telegram 显示加载超时
+      await answerCallbackQuery(cq.id);
+
+      if (data.startsWith("plan_approve:")) {
+        const planId = data.slice("plan_approve:".length);
+        const plan   = await prisma.plan.findUnique({
+          where:   { id: planId },
+          include: { planApproval: true },
+        });
+
+        if (!plan || plan.status !== "pending" || plan.planApproval?.decision !== "pending") {
+          if (cbChat && msgId) {
+            await editTelegramMessage(cbChat, msgId, `⚠️ 此 Plan 状态已变更，无需再次审批`);
+          }
+          return NextResponse.json({ ok: true });
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.planApproval.update({
+            where: { planId },
+            data:  { decision: "approved", decidedBy: `telegram:${cbUser}`, decidedAt: new Date() },
+          });
+          await tx.plan.update({ where: { id: planId }, data: { status: "approved" } });
+        });
+
+        if (cbChat && msgId) {
+          await editTelegramMessage(
+            cbChat, msgId,
+            `✅ *已批准执行*\n\n📋 Plan \`${planId.slice(-8)}\`\n由 @${cbUser} 批准\n\nMission 已创建，完成后通知你`
+          );
+        }
+
+        // 触发 Mission（fire-and-forget，完成后由 mission-orchestrator 发通知）
+        void createMissionFromPlan(planId).catch((err) =>
+          console.error("[TG callback] createMissionFromPlan failed:", String(err))
+        );
+
+      } else if (data.startsWith("plan_reject:")) {
+        const planId = data.slice("plan_reject:".length);
+        const plan   = await prisma.plan.findUnique({
+          where:   { id: planId },
+          include: { planApproval: true },
+        });
+
+        if (!plan || plan.status !== "pending" || plan.planApproval?.decision !== "pending") {
+          if (cbChat && msgId) {
+            await editTelegramMessage(cbChat, msgId, `⚠️ 此 Plan 状态已变更`);
+          }
+          return NextResponse.json({ ok: true });
+        }
+
+        await prisma.$transaction(async (tx) => {
+          await tx.planApproval.update({
+            where: { planId },
+            data:  { decision: "rejected", decidedBy: `telegram:${cbUser}`, decidedAt: new Date() },
+          });
+          await tx.plan.update({ where: { id: planId }, data: { status: "rejected" } });
+        });
+
+        if (cbChat && msgId) {
+          await editTelegramMessage(
+            cbChat, msgId,
+            `❌ *已拒绝执行*\n\n📋 Plan \`${planId.slice(-8)}\`\n由 @${cbUser} 拒绝`
+          );
+        }
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── 普通消息 ──────────────────────────────────────────────────────────────
+    if (!body.message?.text) {
       return NextResponse.json({ ok: true });
     }
 
@@ -39,38 +133,92 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const fromId   = body.message.from?.id;
     const username = body.message.from?.username ?? "unknown";
 
-    // Only allow messages from the configured chat / user
+    // 只允许来自配置 chat / user 的消息
     const allowedChatId = process.env.TELEGRAM_CHAT_ID
       ? Number(process.env.TELEGRAM_CHAT_ID)
       : null;
     if (allowedChatId && chatId !== allowedChatId && fromId !== allowedChatId) {
-      return NextResponse.json({ ok: true }); // silently ignore
+      return NextResponse.json({ ok: true });
     }
 
-    // ---- KPI REPORT: /kpi <project> metric=value [metric=value ...] ----
-    // Example: /kpi wheatcoin revenue=320 orders=8 users=150
-    const kpiMatch = text.match(/^\/kpi\s+(\S+)\s+(.+)$/i);
-    if (kpiMatch) {
-      const slug  = kpiMatch[1].toLowerCase();
-      const kvStr = kpiMatch[2];
+    // ---- RUN: /run [projectSlug] <objective> --------------------------------
+    // 示例: /run furmates 写一篇双11小红书文案
+    //       /run 帮 FurMates 分析本周销售下滑原因
+    const runMatch = text.match(/^\/run\s+([\s\S]+)$/i);
+    if (runMatch) {
+      const args  = runMatch[1].trim();
+      const parts = args.split(/\s+/);
+      const slug  = parts[0].toLowerCase();
 
-      const project = await prisma.project.findFirst({
-        where: { OR: [{ slug }, { name: { equals: slug, mode: "insensitive" } }] },
+      // 尝试把第一个词当项目 slug 或名称匹配
+      const projectBySlug = await prisma.project.findFirst({
+        where: { OR: [{ slug }, { name: { equals: slug, mode: "insensitive" } }], status: "active" },
       });
 
-      if (!project) {
-        await sendTelegramMessage(chatId, `❌ 项目 "${slug}" 不存在\n\n用 /projects 查看可用项目`);
+      const project   = projectBySlug
+        ?? await prisma.project.findFirst({ where: { status: "active" }, orderBy: { name: "asc" } });
+      const objective = projectBySlug ? parts.slice(1).join(" ").trim() : args;
+
+      if (!project || !objective) {
+        await sendTelegramMessage(chatId,
+          `❌ 请提供任务目标\n\n示例: /run furmates 写一篇双11推广文案`);
         return NextResponse.json({ ok: true });
       }
 
-      // Parse key=value pairs (supports integers and decimals)
+      await sendTelegramMessage(chatId,
+        `🔄 正在为 *${project.name}* 生成执行方案…\n目标: ${objective.slice(0, 80)}`);
+
+      // 创建 Insight，作为 Planner 的输入
+      const insight = await prisma.insight.create({
+        data: {
+          projectId:       project.id,
+          type:            "opportunity",
+          severity:        "medium",
+          title:           objective.slice(0, 80),
+          summary:         objective,
+          evidence:        { source: "telegram_run", requestedBy: username },
+          suggestedAction: objective,
+          status:          "new",
+          observedAt:      new Date(),
+        },
+      });
+
+      try {
+        const { plan } = await planFromInsight(insight.id);
+
+        if (plan.status === "approved") {
+          await sendTelegramMessage(chatId,
+            `✅ *低风险，已自动批准*\n\n🎯 ${plan.objective.slice(0, 80)}\n\nMission 执行中，完成后通知你`
+          );
+        }
+        // 高风险：planner 内部已推送 inline 按钮审批通知，此处无需重复发送
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await sendTelegramMessage(chatId, `❌ 生成方案失败:\n${msg.slice(0, 200)}`);
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ---- KPI REPORT: /kpi <project> metric=value [...] ----------------------
+    const kpiMatch = text.match(/^\/kpi\s+(\S+)\s+(.+)$/i);
+    if (kpiMatch) {
+      const kpiSlug = kpiMatch[1].toLowerCase();
+      const kvStr   = kpiMatch[2];
+
+      const project = await prisma.project.findFirst({
+        where: { OR: [{ slug: kpiSlug }, { name: { equals: kpiSlug, mode: "insensitive" } }] },
+      });
+
+      if (!project) {
+        await sendTelegramMessage(chatId, `❌ 项目 "${kpiSlug}" 不存在\n\n用 /projects 查看可用项目`);
+        return NextResponse.json({ ok: true });
+      }
+
       const rawPairs = (kvStr.match(/\w+=[\d.]+/g) ?? [])
         .map((p) => p.split("=") as [string, string]);
       if (rawPairs.length === 0) {
-        await sendTelegramMessage(
-          chatId,
-          `❌ 格式错误\n\n示例: /kpi wheatcoin revenue=320 orders=8`
-        );
+        await sendTelegramMessage(chatId, `❌ 格式错误\n\n示例: /kpi wheatcoin revenue=320 orders=8`);
         return NextResponse.json({ ok: true });
       }
 
@@ -86,26 +234,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
 
       const lines = rawPairs.map(([m, v]) => `  • ${m}: ${v}`).join("\n");
-      await sendTelegramMessage(
-        chatId,
-        `✅ *${project.name}* 数据已上报\n${lines}\n\n_Observer 下次运行时自动分析趋势_`
-      );
+      await sendTelegramMessage(chatId,
+        `✅ *${project.name}* 数据已上报\n${lines}\n\n_Observer 下次运行时自动分析趋势_`);
       return NextResponse.json({ ok: true });
     }
 
-    // ---- MANUAL INSIGHT: /report <project> <summary> ----
-    // Example: /report wheatcoin 本周转化率下降，怀疑是定价问题
+    // ---- MANUAL INSIGHT: /report <project> <summary> ------------------------
     const reportMatch = text.match(/^\/report\s+(\S+)\s+([\s\S]+)$/i);
     if (reportMatch) {
-      const slug    = reportMatch[1].toLowerCase();
+      const repSlug = reportMatch[1].toLowerCase();
       const summary = reportMatch[2].trim();
 
       const project = await prisma.project.findFirst({
-        where: { OR: [{ slug }, { name: { equals: slug, mode: "insensitive" } }] },
+        where: { OR: [{ slug: repSlug }, { name: { equals: repSlug, mode: "insensitive" } }] },
       });
 
       if (!project) {
-        await sendTelegramMessage(chatId, `❌ 项目 "${slug}" 不存在`);
+        await sendTelegramMessage(chatId, `❌ 项目 "${repSlug}" 不存在`);
         return NextResponse.json({ ok: true });
       }
 
@@ -123,14 +268,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         },
       });
 
-      await sendTelegramMessage(
-        chatId,
-        `✅ Insight 已创建\n\n*项目:* ${project.name}\n*摘要:* ${summary.slice(0, 100)}\n*ID:* \`${insight.id}\`\n\n_Planner 可基于此生成执行方案_`
-      );
+      await sendTelegramMessage(chatId,
+        `✅ Insight 已创建\n\n*项目:* ${project.name}\n*摘要:* ${summary.slice(0, 100)}\n` +
+        `*ID:* \`${insight.id}\`\n\n_Planner 可基于此生成执行方案_`);
       return NextResponse.json({ ok: true });
     }
 
-    // ---- LIST PROJECTS: /projects ----
+    // ---- LIST PROJECTS: /projects -------------------------------------------
     if (/^\/projects$/i.test(text)) {
       const projects = await prisma.project.findMany({
         where:   { status: "active" },
@@ -142,12 +286,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: true });
     }
 
-    // ---- APPROVE COMMAND ----
+    // ---- APPROVE COMMAND (文本形式，保留兼容) --------------------------------
     const approveMatch = text.match(/\/approve_(\S+)/);
     if (approveMatch) {
       const result = await handleApprovalResponse(approveMatch[1], "approve");
-      await sendTelegramMessage(
-        chatId,
+      await sendTelegramMessage(chatId,
         result.ok
           ? `✅ 审批已批准！\n任务: ${result.request?.title}`
           : `❌ 审批失败: ${result.error ?? "Unknown error"}`
@@ -155,12 +298,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: true });
     }
 
-    // ---- REJECT COMMAND ----
+    // ---- REJECT COMMAND (文本形式，保留兼容) ---------------------------------
     const rejectMatch = text.match(/\/reject_(\S+)/);
     if (rejectMatch) {
       const result = await handleApprovalResponse(rejectMatch[1], "reject");
-      await sendTelegramMessage(
-        chatId,
+      await sendTelegramMessage(chatId,
         result.ok
           ? `❌ 审批已拒绝！\n任务: ${result.request?.title}`
           : `❌ 拒绝失败: ${result.error ?? "Unknown error"}`
@@ -168,31 +310,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: true });
     }
 
-    // ---- STATUS COMMAND ----
+    // ---- STATUS COMMAND -----------------------------------------------------
     if (/^\/status$/i.test(text)) {
       const [pending, approved, rejected] = await Promise.all([
         getApprovalRequests("pending"),
         getApprovalRequests("approved"),
         getApprovalRequests("rejected"),
       ]);
-      await sendTelegramMessage(
-        chatId,
-        `📊 *审批统计*\n⏳ 待审批: ${pending.length}\n✅ 已批准: ${approved.length}\n❌ 已拒绝: ${rejected.length}`
-      );
+      await sendTelegramMessage(chatId,
+        `📊 *审批统计*\n⏳ 待审批: ${pending.length}\n✅ 已批准: ${approved.length}\n❌ 已拒绝: ${rejected.length}`);
       return NextResponse.json({ ok: true });
     }
 
-    // ---- HELP COMMAND ----
+    // ---- HELP COMMAND -------------------------------------------------------
     if (/^\/help$/i.test(text)) {
       await sendTelegramMessage(chatId, `🤖 *Jarvis 命令列表*
+
+*任务执行*
+/run \\[project\\] \\<目标\\> — 让 Jarvis 生成并执行方案
 
 *数据上报*
 /kpi \\<project\\> metric=value \\.\\.\\. — 上报 KPI 数据
 /report \\<project\\> \\<摘要\\> — 手动创建 Insight
 
 *审批*
-/approve\\_CODE — 批准审批请求
-/reject\\_CODE — 拒绝审批请求
+/approve\\_CODE — 批准审批请求（文本形式）
+/reject\\_CODE — 拒绝审批请求（文本形式）
 /status — 查看审批统计
 
 *其他*
@@ -200,12 +343,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 /help — 显示此帮助
 
 *示例*
+/run furmates 写一篇双11小红书推广文案
 /kpi wheatcoin revenue=320 orders=8
 /report miniaipdf 注册转化率本周下降 15%`);
       return NextResponse.json({ ok: true });
     }
 
-    // Unknown command
+    // 未知命令
     await sendTelegramMessage(chatId, "❓ 未知命令。输入 /help 查看可用命令");
     return NextResponse.json({ ok: true });
 
@@ -219,10 +363,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
 async function sendTelegramMessage(chatId: number, text: string): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) {
-    console.warn("TELEGRAM_BOT_TOKEN not configured");
-    return false;
-  }
+  if (!token) return false;
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method:  "POST",
@@ -230,8 +371,7 @@ async function sendTelegramMessage(chatId: number, text: string): Promise<boolea
       body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
     });
     return res.ok;
-  } catch (err) {
-    console.error("Error sending telegram message:", err);
+  } catch {
     return false;
   }
 }
