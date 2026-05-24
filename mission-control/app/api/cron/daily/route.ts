@@ -5,6 +5,7 @@ import { syncStripeKpis } from "@/lib/integrations/stripe";
 import { syncGSCKpis } from "@/lib/integrations/gsc";
 import { syncGAKpis } from "@/lib/integrations/ga";
 import { syncShopifyKpis } from "@/lib/integrations/shopify";
+import { syncWheatcoinKpis } from "@/lib/integrations/wheatcoin";
 import { runEmailDrip, formatDripSummary } from "@/lib/email-drip";
 import { runAngelScanner, formatAngelSummary } from "@/lib/angel-scanner";
 
@@ -146,6 +147,18 @@ export async function GET(req: NextRequest) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`[Cron Daily] Shopify KPI 同步失败:`, msg);
       kpiStatus.shopify = { ok: false, error: msg };
+    }
+
+    // 同步 Wheatcoin KPI（社区 + pump.fun 代币数据）
+    try {
+      console.log(`[Cron Daily] 开始同步 Wheatcoin KPI...`);
+      const wheatcoinResult = await syncWheatcoinKpis();
+      kpiStatus.wheatcoin = { ok: wheatcoinResult.community || wheatcoinResult.token };
+      console.log(`[Cron Daily] Wheatcoin KPI 同步完成:`, wheatcoinResult);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[Cron Daily] Wheatcoin KPI 同步失败:`, msg);
+      kpiStatus.wheatcoin = { ok: false, error: msg };
     }
 
     // ==================== Email Drip 序列 ====================
