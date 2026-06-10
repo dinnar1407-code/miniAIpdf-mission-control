@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import { PrismaClient, MemoryKind, Prisma } from "@prisma/client";
+import { MemoryKind, Prisma } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { embedText, EMBEDDING_MODEL } from "@/lib/embeddings";
-
-const prisma = new PrismaClient();
 
 // ─────────────────────────────────────────────────────────────
 // Types

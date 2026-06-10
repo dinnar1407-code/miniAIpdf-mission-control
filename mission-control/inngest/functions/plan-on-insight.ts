@@ -1,8 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { inngest }        from "@/inngest/client";
 import { planFromInsight } from "@/lib/planner";
 
-const prisma = new PrismaClient();
 
 export const planOnInsightFn = inngest.createFunction(
   {

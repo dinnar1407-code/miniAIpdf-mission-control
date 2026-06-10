@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join }         from "path";
-import { PrismaClient, Reversibility, type Plan, type PlanStep } from "@prisma/client";
+import { Reversibility, type Plan, type PlanStep } from "@prisma/client";
 import { embedText }                      from "@/lib/embeddings";
 import { retrieveSimilar, markRetrieved } from "@/lib/memory";
 import { llmCall }                        from "@/lib/llm";
@@ -11,7 +11,7 @@ import { inngest }                        from "@/inngest/client";
 import { createMissionFromPlan }          from "@/lib/mission-orchestrator";
 import { sendTelegramWithButtons }        from "@/lib/telegram";
 
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/db";
 
 // Loaded once at cold-start — iterate prompts/planner-system.md independently
 const SYSTEM_PROMPT = readFileSync(

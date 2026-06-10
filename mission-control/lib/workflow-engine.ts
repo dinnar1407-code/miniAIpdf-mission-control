@@ -9,6 +9,7 @@ import { createApprovalRequest } from "@/lib/approval";
 import { getAgentMemoryContext, extractAndSaveMemory } from "@/lib/ai/agent-memory";
 import { publishToChannels } from "@/lib/channels/publisher";
 import { sendTelegram } from "@/lib/telegram";
+import { evaluateCondition } from "@/lib/safe-condition";
 
 // ==================== LOG HELPER ====================
 
@@ -202,20 +203,16 @@ async function executeStep(
         return { success: true, output: "true" };
       }
 
-      try {
-        // 安全沙箱：仅提供 output（上一步结果）作为上下文变量
-        // 支持示例：output.includes("success") / output === "true" / Number(output) > 100
-        // eslint-disable-next-line no-new-func
-        const fn = new Function("output", `"use strict"; try { return !!(${expr}); } catch { return false; }`);
-        const result: boolean = fn(prevOutput ?? "");
-        const resultStr = result ? "true" : "false";
-        await addLog(runId, index, step.type, `✓ 条件结果 = ${resultStr}`, "success");
-        return { success: true, output: resultStr };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "表达式执行错误";
-        await addLog(runId, index, step.type, `✗ 条件评估失败: ${message}`, "error");
-        return { success: false, error: `Condition evaluation failed: ${message}` };
+      // 用白名单解析器求值，绝不把表达式当 JavaScript 执行（详见 lib/safe-condition.ts）
+      // 仅 output（上一步结果）参与判断，支持 includes/startsWith/相等/数值比较等固定句式
+      const { value, recognized } = evaluateCondition(expr, prevOutput ?? "");
+      if (!recognized) {
+        // 句式无法识别：已安全按 false 处理，但记录告警以便排查 workflow 写错的条件
+        await addLog(runId, index, step.type, `⚠ 无法识别的条件表达式，按 false 处理: ${expr}`, "warn");
       }
+      const resultStr = value ? "true" : "false";
+      await addLog(runId, index, step.type, `✓ 条件结果 = ${resultStr}`, "success");
+      return { success: true, output: resultStr };
     }
 
     // ── NOTIFY ───────────────────────────────────────────────

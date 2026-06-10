@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient }              from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { createMissionFromPlan }     from "@/lib/mission-orchestrator";
 
 export const maxDuration = 120;
 
-const prisma = new PrismaClient();
 
 // POST /api/autopilot/plans/:id/execute
 // Manually trigger Mission creation for an approved Plan.
