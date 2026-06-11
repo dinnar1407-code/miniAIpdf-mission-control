@@ -1,0 +1,107 @@
+# Jarvis 定时任务（GitHub Actions Cron）
+# 用途：替代已从 vercel.json 移除的 Vercel cron，定时调用生产端点 /api/cron/<name>（均为 GET）。
+# 说明：
+#   - GitHub cron 一律按 UTC（与原 Vercel cron 同时区，行为一致）。
+#   - schedule 触发只在“默认分支(main)”上按计划运行；本文件必须合并进 main 才会真正定时跑。
+#   - 本文件进 main 后，Actions 页才会出现 workflow_dispatch 的「Run workflow」手动按钮。
+name: jarvis-cron
+
+# 最小权限：本作业只对外发 HTTP 请求，不需要任何仓库读写权限。
+permissions: {}
+
+on:
+  # 定时任务（UTC）。同一时刻多条命中时，会各自独立触发一次 run，
+  # 每个 run 只处理它那一条 cron（下方按 github.event.schedule 精确路由）。
+  schedule:
+    - cron: "30 1 * * *"   # briefing —— 每天 01:30 UTC（=09:30 北京时间）：发早报到 Telegram
+    - cron: "0 * * * *"    # hourly   —— 每小时整点：每小时工作流、过期审批、API 状态、GA4 异常检测
+    - cron: "0 9 * * *"    # daily    —— 每天 09:00 UTC：每日工作流、KPI 同步、邮件滴灌、天使客户扫描
+    - cron: "0 10 * * *"   # social   —— 每天 10:00 UTC：社媒发布工作流
+    - cron: "0 8 * * 1"    # weekly   —— 每周一 08:00 UTC：每周工作流
+                           #   （原 Vercel 配的是 "0 3 * * *" 每天，但该端点本意是每周一、代码无周一门控，
+                           #    等于让“每周任务”每天跑 7 次，是个隐藏 bug。这里改为真正的周一。）
+
+  # 手动触发（合并进 main 后才出现）。默认 briefing —— 只发一条自己的 Telegram，最无害；
+  # 不默认 daily/social，因为它们有发布类副作用（发邮件、发社媒）。
+  workflow_dispatch:
+    inputs:
+      endpoint:
+        description: "手动调用哪个端点"
+        required: false
+        default: briefing
+        type: choice
+        options:
+          - briefing
+          - hourly
+          - daily
+          - social
+          - weekly
+
+# 并发控制：按命中的端点分组，避免同一端点上次没跑完又叠一次。
+# 定时任务通常不希望取消正在跑的，所以 cancel-in-progress 设 false。
+# 加 'unknown' 兜底，避免 schedule 与 inputs 都为空时退化成同一个空键。
+concurrency:
+  group: jarvis-cron-${{ github.event.schedule || github.event.inputs.endpoint || 'unknown' }}
+  cancel-in-progress: false
+
+jobs:
+  call-endpoint:
+    runs-on: ubuntu-latest
+    # 端点 maxDuration 上限 300s（5 分钟）。作业超时设 7 分钟，给端点跑满 + 网络/TLS 留余量，
+    # 避免“端点正常跑满”却被作业层误杀导致状态不一致。
+    timeout-minutes: 7
+    steps:
+      - name: 路由并调用生产端点
+        env:
+          # 密钥从 GitHub secrets 注入，绝不写进明文命令、绝不 echo 出来
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # 生产域名：优先用仓库变量 vars.BASE_URL（改域名无需动 workflow），未设置时回退默认值
+          BASE_URL: ${{ vars.BASE_URL || 'https://jarvis.miniaipdf.com' }}
+          # 定时触发时 SCHEDULE 是 cron 字符串；手动触发时 SCHEDULE 为空，用 ENDPOINT_INPUT 兜底
+          SCHEDULE: ${{ github.event.schedule }}
+          ENDPOINT_INPUT: ${{ github.event.inputs.endpoint }}
+        run: |
+          # 严格模式：命令失败即退、未定义变量报错、管道任一环节失败即失败
+          # 绝不开 set -x —— 否则会把 $CRON_SECRET 展开进日志
+          set -euo pipefail
+
+          # ── 路由：把触发来源解析成端点名 NAME ──
+          # 定时触发：按 $SCHEDULE（精确 cron 字符串）匹配，不能错配
+          # 手动触发：$SCHEDULE 为空，用 $ENDPOINT_INPUT
+          if [ -n "$SCHEDULE" ]; then
+            case "$SCHEDULE" in
+              "30 1 * * *") NAME=briefing ;;
+              "0 * * * *")  NAME=hourly   ;;
+              "0 9 * * *")  NAME=daily    ;;
+              "0 10 * * *") NAME=social   ;;
+              "0 8 * * 1")  NAME=weekly   ;;
+              *) echo "未知 schedule: '$SCHEDULE'"; exit 1 ;;   # 大声失败，避免静默错配
+            esac
+          else
+            case "$ENDPOINT_INPUT" in
+              briefing|hourly|daily|social|weekly) NAME="$ENDPOINT_INPUT" ;;
+              *) echo "未知 endpoint 输入: '$ENDPOINT_INPUT'"; exit 1 ;;
+            esac
+          fi
+
+          echo "调用：GET ${BASE_URL}/api/cron/${NAME}"
+
+          # 所有 cron 端点均为 GET，带 Bearer 鉴权。
+          # --connect-timeout 快速失败；--max-time 给端点 300s + 余量；
+          # 响应体写文件，避免把密钥/长响应展开到命令行
+          code=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+            --connect-timeout 15 --max-time 360 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${BASE_URL}/api/cron/${NAME}")
+
+          echo "HTTP $code"
+          echo "响应（前 500 字节）："
+          head -c 500 /tmp/resp.txt || true
+          echo ""
+
+          # 非 2xx 一律失败（网络/DNS 错误时 curl 把 code 置 000，同样判失败）
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            echo "::error::cron ${NAME} 返回 ${code}"
+            exit 1
+          fi
+          echo "✅ cron ${NAME} 调用成功"
