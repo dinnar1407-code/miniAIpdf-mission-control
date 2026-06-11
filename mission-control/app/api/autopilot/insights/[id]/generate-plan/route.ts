@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { llmCall } from "@/lib/llm";
 
-const prisma = new PrismaClient();
 
 export const maxDuration = 60;
 

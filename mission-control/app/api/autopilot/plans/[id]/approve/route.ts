@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient }              from "@prisma/client";
-import { inngest }                   from "@/inngest/client";
+import { prisma } from "@/lib/db";
 import { createMissionFromPlan }     from "@/lib/mission-orchestrator";
 
-const prisma = new PrismaClient();
 
 export async function POST(
   req: NextRequest,
@@ -56,8 +54,9 @@ export async function POST(
     });
   });
 
-  void inngest.send({ name: "autopilot/plans.approved", data: { planId } });
-
+  // 直接创建 Mission（下方 await）即为权威路径，结果用于返回 missionId。
+  // 不再额外发 Inngest 事件——否则 Inngest worker 会再调一次 createMissionFromPlan，
+  // 造成重复触发（虽有唯一约束兜底，但应从源头避免无谓的重复工作）。
   let mission;
   try {
     mission = await createMissionFromPlan(planId);

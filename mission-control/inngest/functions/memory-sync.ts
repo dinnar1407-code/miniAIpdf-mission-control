@@ -1,9 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { inngest } from "@/inngest/client";
 import { llmCall } from "@/lib/llm";
 import { embedText, EMBEDDING_MODEL } from "@/lib/embeddings";
 
-const prisma = new PrismaClient();
 
 const SUMMARIZE_SYSTEM = `You are a knowledge distillation agent. Given an AI-generated insight,
 write a concise 2-3 sentence memory entry suitable for future semantic retrieval.

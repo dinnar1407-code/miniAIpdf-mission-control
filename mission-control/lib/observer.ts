@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/db";
 
 const WINDOW_DAYS = 7;
 const DELTA_THRESHOLD = 0.2;   // 20% swing triggers observation

@@ -1,8 +1,7 @@
-import { PrismaClient }          from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { inngest }               from "@/inngest/client";
 import { createMissionFromPlan } from "@/lib/mission-orchestrator";
 
-const prisma = new PrismaClient();
 
 export const missionOnApprovalFn = inngest.createFunction(
   {

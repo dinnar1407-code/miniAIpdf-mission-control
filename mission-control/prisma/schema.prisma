@@ -436,7 +436,8 @@ model PlanStep {
 // 5. MISSION — 执行实例，绑定 WorkflowRun
 model Mission {
   id        String  @id @default(cuid())
-  planId    String
+  // 一个 Plan 只能对应一个 Mission：数据库层杜绝并发重复创建（防重复执行/扣费）
+  planId    String  @unique
   plan      Plan    @relation(fields: [planId], references: [id])
   projectId String
   project   Project @relation(fields: [projectId], references: [id])

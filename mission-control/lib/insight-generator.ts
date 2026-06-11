@@ -1,9 +1,8 @@
-import { PrismaClient, InsightType, Severity } from "@prisma/client";
+import { InsightType, Severity } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { llmCall } from "@/lib/llm";
 import { type RawObservation } from "@/lib/observer";
 import { inngest } from "@/inngest/client";
-
-const prisma = new PrismaClient();
 
 interface InsightDraft {
   type: InsightType;

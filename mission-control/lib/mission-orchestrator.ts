@@ -1,10 +1,9 @@
-import { PrismaClient, PlanStatus, type Mission } from "@prisma/client";
+import { Prisma, PlanStatus, type Mission } from "@prisma/client";
+import { prisma }                     from "@/lib/db";
 import { executeWorkflow }             from "@/lib/workflow-engine";
 import type { WorkflowStep }           from "@/lib/workflow-types";
 import { sendTelegram }                from "@/lib/telegram";
 import { writeMemory }                 from "@/lib/memory";
-
-const prisma = new PrismaClient();
 
 export async function createMissionFromPlan(planId: string): Promise<Mission> {
   // 1. Load Plan + steps + project
@@ -44,36 +43,50 @@ export async function createMissionFromPlan(planId: string): Promise<Mission> {
   // 5. Atomic write: Workflow + Mission + Plan.status=executing
   const created = { missionId: "", workflowId: "" };
 
-  await prisma.$transaction(async (tx) => {
-    const workflow = await tx.workflow.create({
-      data: {
-        name:        `plan:${plan.id}:${plan.objective.slice(0, 50)}`,
-        steps:       JSON.stringify(workflowSteps),
-        targetAgent: null,
-        projectId:   plan.projectId,
-        status:      "active",
-      },
-    });
+  try {
+    await prisma.$transaction(async (tx) => {
+      const workflow = await tx.workflow.create({
+        data: {
+          name:        `plan:${plan.id}:${plan.objective.slice(0, 50)}`,
+          steps:       JSON.stringify(workflowSteps),
+          targetAgent: null,
+          projectId:   plan.projectId,
+          status:      "active",
+        },
+      });
 
-    const mission = await tx.mission.create({
-      data: {
-        planId:        plan.id,
-        projectId:     plan.projectId,
-        workflowId:    workflow.id,
-        workflowRunId: null,
-        status:        "queued",
-        startedAt:     new Date(),
-      },
-    });
+      const mission = await tx.mission.create({
+        data: {
+          planId:        plan.id,
+          projectId:     plan.projectId,
+          workflowId:    workflow.id,
+          workflowRunId: null,
+          status:        "queued",
+          startedAt:     new Date(),
+        },
+      });
 
-    await tx.plan.update({
-      where: { id: planId },
-      data:  { status: "executing" },
-    });
+      await tx.plan.update({
+        where: { id: planId },
+        data:  { status: "executing" },
+      });
 
-    created.missionId  = mission.id;
-    created.workflowId = workflow.id;
-  });
+      created.missionId  = mission.id;
+      created.workflowId = workflow.id;
+    });
+  } catch (err) {
+    // 并发兜底：第 17 行的 findFirst「先查后建」不是原子操作，两个并发调用
+    // （如 approve 路由直接调用 + Inngest 事件）可能都查不到、都尝试创建。
+    // Mission.planId 上的唯一约束会让后到的那次创建抛 P2002，整个事务回滚
+    // （连同 Workflow，不留孤儿）。此时说明另一条路径已经建好并在执行 Mission，
+    // 我们直接返回那个已存在的 Mission，绝不重复执行 workflow —— 这是避免
+    // 「重复发货 / 重复群发 / 重复扣费」的关键防线。
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const existing = await prisma.mission.findFirst({ where: { planId } });
+      if (existing) return existing;
+    }
+    throw err;
+  }
 
   const { missionId, workflowId } = created;
 
