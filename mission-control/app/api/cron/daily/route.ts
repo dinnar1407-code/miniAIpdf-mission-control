@@ -6,6 +6,7 @@ import { syncGSCKpis } from "@/lib/integrations/gsc";
 import { syncGAKpis } from "@/lib/integrations/ga";
 import { syncShopifyKpis } from "@/lib/integrations/shopify";
 import { syncWheatcoinKpis } from "@/lib/integrations/wheatcoin";
+import { syncShiquKpis, getShiquProjectId } from "@/lib/integrations/shiqu";
 import { runEmailDrip, formatDripSummary } from "@/lib/email-drip";
 import { runAngelScanner, formatAngelSummary } from "@/lib/angel-scanner";
 import { runObserver } from "@/lib/observer";
@@ -161,6 +162,19 @@ export async function GET(req: NextRequest) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`[Cron Daily] Wheatcoin KPI 同步失败:`, msg);
       kpiStatus.wheatcoin = { ok: false, error: msg };
+    }
+
+    // 同步拾趣 KPI（阶段4：让拾趣进入自循环）——必须在 Observer 之前，否则当天数据还没入库
+    try {
+      console.log(`[Cron Daily] 开始同步拾趣 KPI...`);
+      const shiquProjectId = await getShiquProjectId();
+      await syncShiquKpis(shiquProjectId);
+      kpiStatus.shiqu = { ok: true };
+      console.log(`[Cron Daily] 拾趣 KPI 同步成功`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[Cron Daily] 拾趣 KPI 同步失败:`, msg);
+      kpiStatus.shiqu = { ok: false, error: msg };
     }
 
     // ==================== Observer → Insight 自动管线 ====================
