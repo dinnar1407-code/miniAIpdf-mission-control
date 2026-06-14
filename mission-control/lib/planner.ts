@@ -170,13 +170,20 @@ export async function planFromInsight(
   }
 
   // 13. Determine approval requirement — use project's configured trust threshold
+  // 安全加固（抗提示词注入纵深防御）：
+  //   - 把 planOutput.steps 一并传给 needsApproval，让它扫描 action 文本里的危险操作
+  //     关键词（发邮件/退款/发货/发布/群发…），命中即强制人工审批，
+  //     不再单纯信任 LLM 自报的 riskLevel/reversibility。
+  //   - autoApproveThreshold 兜底默认从 1 改成 0：未显式配置 trust 阈值的项目
+  //     默认「不自动批准」，把自动放行的决定权交还给项目显式配置。
   const requireApproval = needsApproval(
     {
       riskLevel:     planOutput.riskLevel,
       reversibility: planOutput.reversibility as Reversibility,
       blastRadius:   planOutput.blastRadius,
     },
-    insight.project?.autoApproveThreshold ?? 1
+    insight.project?.autoApproveThreshold ?? 0,
+    planOutput.steps,
   );
 
   // 14. Atomic write

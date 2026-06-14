@@ -8,6 +8,8 @@ import { syncShopifyKpis } from "@/lib/integrations/shopify";
 import { syncWheatcoinKpis } from "@/lib/integrations/wheatcoin";
 import { runEmailDrip, formatDripSummary } from "@/lib/email-drip";
 import { runAngelScanner, formatAngelSummary } from "@/lib/angel-scanner";
+import { runObserver } from "@/lib/observer";
+import { generateInsights } from "@/lib/insight-generator";
 
 async function sendTelegram(text: string): Promise<void> {
   const token  = process.env.TELEGRAM_BOT_TOKEN;
@@ -161,6 +163,42 @@ export async function GET(req: NextRequest) {
       kpiStatus.wheatcoin = { ok: false, error: msg };
     }
 
+    // ==================== Observer → Insight 自动管线 ====================
+    // 这一步是「自动闭环」的关键一环，承接上面刚刚同步好的 KPI 数据：
+    //   1) runObserver()：扫描最近 7 天的 KPI/指标快照，找出"异常波动"或"离目标差距过大"
+    //      的指标，返回一批原始观察值（observations）。
+    //   2) generateInsights(observations)：把这些观察值交给 LLM 分类、生成中英双语的
+    //      Insight（洞察），写入数据库，供 Planner 等后续环节消费。
+    // 必须放在 KPI 同步「之后」——因为 Observer 扫描的就是上面刚写入的最新快照数据；
+    // 如果没人调用它，KPI 同步完就没人扫描生成 Insight，整条自动闭环就是断的。
+    const observerStatus: {
+      ok: boolean;
+      observations?: number;
+      created?: number;
+      error?: string;
+    } = { ok: false };
+    try {
+      console.log(`[Cron Daily] 开始 Observer KPI 扫描...`);
+      // runObserver() 返回 ObserverResult，这里只需要其中的 observations 数组
+      const { observations } = await runObserver();
+      // 把扫描出来的观察值喂给 Insight 生成器；返回 { processed, created, skipped, errors }
+      const insightResult = await generateInsights(observations);
+      observerStatus.ok           = true;
+      observerStatus.observations = observations.length;
+      observerStatus.created      = insightResult.created;
+      console.log(
+        `[Cron Daily] Observer 完成：扫描 ${observations.length} 条观察值，` +
+          `新建 ${insightResult.created} 条 Insight（跳过 ${insightResult.skipped}，失败 ${insightResult.errors}）`
+      );
+    } catch (err) {
+      // 单独 try/catch 包裹：Observer/Insight 任一步失败都不能让整个 cron 崩溃，
+      // 否则会连累后面的 Email Drip、Angel 扫描等步骤跑不到
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error(`[Cron Daily] Observer/Insight 失败:`, msg);
+      observerStatus.ok    = false;
+      observerStatus.error = msg;
+    }
+
     // ==================== Email Drip 序列 ====================
     const dripStatus: { ok: boolean; sent?: number; error?: string } = { ok: false };
     try {
@@ -206,6 +244,7 @@ export async function GET(req: NextRequest) {
       triggered: dailyWorkflows.length,
       results,
       kpiStatus,
+      observerStatus,
       dripStatus,
       angelStatus,
     });
