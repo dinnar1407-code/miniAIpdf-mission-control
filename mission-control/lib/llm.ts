@@ -1,4 +1,8 @@
 import { callClaude, type ClaudeModel } from "@/lib/ai/claude-client";
+import { callMiniMax } from "@/lib/ai/minimax-client";
+
+// 主模型用 MiniMax；Anthropic 仅在 MiniMax 失败时兜底（见 llmCall）
+const MINIMAX_MODEL = process.env.MINIMAX_MODEL || "MiniMax-M3";
 
 // Task type drives model selection — add new tasks here as phases expand
 export type LlmTask = "observe" | "plan" | "embed_summary" | "fast";
@@ -29,7 +33,8 @@ export interface LlmCallOptions {
 
 export interface LlmResult {
   content: string;
-  model: ClaudeModel;
+  model: string;                          // 可能是 MiniMax 或 Claude 模型名
+  provider: "minimax" | "anthropic";      // 实际命中的提供商（便于观测/排障）
   inputTokens: number;
   outputTokens: number;
   latencyMs: number;
@@ -37,19 +42,42 @@ export interface LlmResult {
 }
 
 export async function llmCall(opts: LlmCallOptions): Promise<LlmResult> {
-  const model = TASK_MODEL[opts.task];
   const startedAt = Date.now();
 
-  const response = await callClaude(
-    opts.systemPrompt,
-    [{ role: "user", content: opts.userPrompt }],
-    { model, maxTokens: opts.maxTokens, temperature: opts.temperature }
-  );
+  // ── 主：MiniMax ───────────────────────────────────────────────────────────
+  let provider: "minimax" | "anthropic" = "minimax";
+  let model: string = MINIMAX_MODEL;
+  let response = await callMiniMax(opts.systemPrompt, opts.userPrompt, {
+    maxTokens:   opts.maxTokens,
+    temperature: opts.temperature,
+  });
 
-  const latencyMs = Date.now() - startedAt;
+  // ── 兜底：MiniMax 失败（限流/超时/欠费等）→ Anthropic ─────────────────────
+  if (!response.success) {
+    console.warn(
+      JSON.stringify({
+        event:  "llm_fallback",
+        task:   opts.task,
+        from:   "minimax",
+        to:     "anthropic",
+        reason: (response.error ?? "").slice(0, 200),
+        ts:     new Date().toISOString(),
+      })
+    );
+    provider = "anthropic";
+    model    = TASK_MODEL[opts.task]; // 回到该任务原本的 Claude 模型
+    response = await callClaude(
+      opts.systemPrompt,
+      [{ role: "user", content: opts.userPrompt }],
+      { model: model as ClaudeModel, maxTokens: opts.maxTokens, temperature: opts.temperature }
+    );
+  }
+
+  const latencyMs    = Date.now() - startedAt;
   const inputTokens  = response.usage?.input_tokens  ?? 0;
   const outputTokens = response.usage?.output_tokens ?? 0;
-  const rates = COST_PER_1M[model];
+  // 成本仅对 Anthropic 估算；MiniMax 走套餐计费，这里按 0 记
+  const rates = provider === "anthropic" ? COST_PER_1M[model as ClaudeModel] : { input: 0, output: 0 };
   const estimatedCostUsd =
     (inputTokens / 1_000_000) * rates.input +
     (outputTokens / 1_000_000) * rates.output;
@@ -59,6 +87,7 @@ export async function llmCall(opts: LlmCallOptions): Promise<LlmResult> {
     JSON.stringify({
       event:            "llm_call",
       task:             opts.task,
+      provider,
       model,
       inputTokens,
       outputTokens,
@@ -71,8 +100,8 @@ export async function llmCall(opts: LlmCallOptions): Promise<LlmResult> {
   );
 
   if (!response.success) {
-    throw new Error(`llmCall [${opts.task}] failed: ${response.error}`);
+    throw new Error(`llmCall [${opts.task}] failed (MiniMax 主 + Anthropic 兜底都失败): ${response.error}`);
   }
 
-  return { content: response.content, model, inputTokens, outputTokens, latencyMs, estimatedCostUsd };
+  return { content: response.content, model, provider, inputTokens, outputTokens, latencyMs, estimatedCostUsd };
 }
