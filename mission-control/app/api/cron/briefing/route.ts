@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendTelegram } from "@/lib/telegram";
+import { fetchKeleSummary, formatKeleBriefingLines } from "@/lib/integrations/kele";
 
 export const maxDuration = 60;
 
@@ -142,6 +143,17 @@ export async function GET(req: NextRequest) {
             : mission.plan.objective;
         lines.push(`❌ *${proj}* — ${obj}`);
       }
+    }
+
+    // ——— 可乐量化组合（L0 监控简报；只读，可乐故障不打断晨报）———
+    try {
+      const kele = await fetchKeleSummary();
+      if (kele) {
+        lines.push("");
+        lines.push(...formatKeleBriefingLines(kele));
+      }
+    } catch (err) {
+      console.error("[Cron Briefing] 可乐摘要失败:", err);
     }
 
     lines.push("");
