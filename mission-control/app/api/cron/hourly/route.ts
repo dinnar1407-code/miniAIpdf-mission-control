@@ -4,6 +4,7 @@ import { executeWorkflow } from "@/lib/workflow-engine";
 import { expireOldRequests } from "@/lib/approval";
 import { listConversations } from "@/lib/integrations/tidio";
 import { syncGARealtimeKpis } from "@/lib/integrations/ga";
+import { fetchKeleSummary, detectKeleHealthIssues } from "@/lib/integrations/kele";
 import { sendTelegram } from "@/lib/telegram";
 
 // MiniAIPDF project ID — GA4 property is tracked against this project
@@ -232,6 +233,54 @@ export async function GET(req: NextRequest) {
       console.error("[Cron Hourly] GA4 实时监控失败:", gaStatus.error);
     }
 
+    // ==================== 可乐量化健康监控（L1 智能预警）====================
+    // 可乐自己宕了没法给自己报警——这里由 Jarvis 代为盯防。只读、写 Alert 去重、不触发自动计划。
+    const keleHealth: { ok: boolean; issue?: string; alerted?: boolean } = { ok: true };
+    try {
+      let kele = await fetchKeleSummary();
+      // 单次打不通可能是网络抖动：重试一次，两次都失败才当真，降低误报
+      if (kele && !kele.ok) {
+        await new Promise((r) => setTimeout(r, 2000));
+        kele = await fetchKeleSummary();
+      }
+      if (kele) {
+        const issue = detectKeleHealthIssues(kele);
+        if (issue) {
+          keleHealth.ok = false;
+          keleHealth.issue = issue.message;
+          // 去重：6h 内已有同源未处理告警则不重复推送（避免每小时刷屏）
+          const recentAlert = await prisma.alert.findFirst({
+            where: {
+              source: "kele_health",
+              status: { in: ["new", "acknowledged"] },
+              createdAt: { gte: new Date(now.getTime() - 6 * 60 * 60 * 1000) },
+            },
+          });
+          if (!recentAlert) {
+            await prisma.alert.create({
+              data: {
+                projectId: null,
+                severity: issue.severity,
+                source: "kele_health",
+                message: `可乐健康异常：${issue.message}`,
+                status: "new",
+              },
+            });
+            void sendTelegram(
+              `🩺 *可乐量化 · 健康告警*\n\n` +
+              `${issue.message}\n\n` +
+              `严重度: ${issue.severity}\n` +
+              `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+            );
+            keleHealth.alerted = true;
+            console.log(`[Cron Hourly] 可乐健康告警已发送: ${issue.message}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[Cron Hourly] 可乐健康监控失败:", err instanceof Error ? err.message : err);
+    }
+
     return NextResponse.json({
       ok: true,
       triggeredAt: now.toISOString(),
@@ -241,6 +290,7 @@ export async function GET(req: NextRequest) {
       apiStatus,
       tidioAlertSent,
       gaRealtime: gaStatus,
+      keleHealth,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
