@@ -4,7 +4,7 @@ import { executeWorkflow } from "@/lib/workflow-engine";
 import { expireOldRequests } from "@/lib/approval";
 import { listConversations } from "@/lib/integrations/tidio";
 import { syncGARealtimeKpis } from "@/lib/integrations/ga";
-import { fetchKeleSummary, detectKeleHealthIssues } from "@/lib/integrations/kele";
+import { fetchKeleSummary, detectKeleHealthIssues, assessDrawdown } from "@/lib/integrations/kele";
 import { sendTelegram } from "@/lib/telegram";
 
 // MiniAIPDF project ID — GA4 property is tracked against this project
@@ -236,6 +236,7 @@ export async function GET(req: NextRequest) {
     // ==================== 可乐量化健康监控（L1 智能预警）====================
     // 可乐自己宕了没法给自己报警——这里由 Jarvis 代为盯防。只读、写 Alert 去重、不触发自动计划。
     const keleHealth: { ok: boolean; issue?: string; alerted?: boolean } = { ok: true };
+    const keleDrawdown: { tracked: boolean; equity?: number; drawdown?: number; alerted?: boolean } = { tracked: false };
     try {
       let kele = await fetchKeleSummary();
       // 单次打不通可能是网络抖动：重试一次，两次都失败才当真，降低误报
@@ -276,6 +277,54 @@ export async function GET(req: NextRequest) {
             console.log(`[Cron Hourly] 可乐健康告警已发送: ${issue.message}`);
           }
         }
+
+        // ——— 组合回撤预警(L1)：Jarvis 自存可靠权益序列 → 峰值算回撤 ———
+        if (kele.ok && kele.totalEquity > 0) {
+          // 按小时 upsert 组合权益（projectId=null → Observer 不扫描、不会触发自动计划）
+          const hourBucket = new Date(now);
+          hourBucket.setMinutes(0, 0, 0);
+          const snapId = `kele_equity_${hourBucket.toISOString().slice(0, 13)}`;
+          await prisma.kpiSnapshot.upsert({
+            where:  { id: snapId },
+            create: { id: snapId, date: hourBucket, projectId: null, source: "kele", metric: "kele_portfolio_equity", value: kele.totalEquity },
+            update: { value: kele.totalEquity },
+          });
+          // 近 30 天序列求峰值（含刚写入的当前点，故峰值≥当前→回撤≥0）
+          const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          const series = await prisma.kpiSnapshot.findMany({
+            where:   { projectId: null, metric: "kele_portfolio_equity", date: { gte: since30d } },
+            orderBy: { date: "asc" },
+          });
+          const peak = series.reduce((m, s) => Math.max(m, s.value), kele.totalEquity);
+          keleDrawdown.tracked  = true;
+          keleDrawdown.equity   = kele.totalEquity;
+          keleDrawdown.drawdown = peak > 0 ? (peak - kele.totalEquity) / peak : 0;
+
+          const dd = assessDrawdown(peak, kele.totalEquity);
+          if (dd) {
+            // 去重：6h 内已有同源未处理告警则不重复
+            const recentDd = await prisma.alert.findFirst({
+              where: {
+                source:    "kele_drawdown",
+                status:    { in: ["new", "acknowledged"] },
+                createdAt: { gte: new Date(now.getTime() - 6 * 60 * 60 * 1000) },
+              },
+            });
+            if (!recentDd) {
+              const pct = (dd.drawdown * 100).toFixed(1);
+              const msg = `组合权益自峰值回撤 ${pct}%（当前 $${Math.round(kele.totalEquity).toLocaleString("en-US")}）`;
+              await prisma.alert.create({
+                data: { projectId: null, severity: dd.severity, source: "kele_drawdown", message: `可乐组合回撤：${msg}`, status: "new" },
+              });
+              void sendTelegram(
+                `📉 *可乐量化 · 回撤预警*\n\n${msg}\n严重度: ${dd.severity}\n` +
+                `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+              );
+              keleDrawdown.alerted = true;
+              console.log(`[Cron Hourly] 可乐回撤告警已发送: ${msg}`);
+            }
+          }
+        }
       }
     } catch (err) {
       console.error("[Cron Hourly] 可乐健康监控失败:", err instanceof Error ? err.message : err);
@@ -291,6 +340,7 @@ export async function GET(req: NextRequest) {
       tidioAlertSent,
       gaRealtime: gaStatus,
       keleHealth,
+      keleDrawdown,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
