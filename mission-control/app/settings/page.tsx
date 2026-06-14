@@ -8,6 +8,10 @@ import {
   Loader2, Radio, Zap, Settings2, ChevronDown, ChevronUp, FlaskConical, Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+// 复用已有的新建项目对话框组件（admin 页已经在用，逻辑完整可靠）
+import NewProjectDialog from "@/components/admin/new-project-dialog";
+// 编辑项目对话框（本次新增，逻辑同 NewProjectDialog 但走 PATCH）
+import EditProjectDialog from "@/components/admin/edit-project-dialog";
 
 // ── Types ──────────────────────────────────────────────────────
 const PROJECTS = [
@@ -573,12 +577,20 @@ export default function SettingsPage() {
   const [createdKey, setCreatedKey]   = useState<string | null>(null);
   const [copied, setCopied]           = useState(false);
   const [showForm, setShowForm]       = useState(false);
+  const [showNewProject, setShowNewProject] = useState(false);            // 控制"新建项目"对话框的显隐
+  const [editProject, setEditProject]       = useState<DbProject | null>(null); // 正在编辑的项目（null = 不显示编辑弹窗）
+
+  // 把"加载项目列表"抽成独立函数，这样新建成功后可以再调一次刷新
+  const loadProjects = useCallback(async () => {
+    const res = await fetch("/api/projects");
+    setProjects(res.ok ? await res.json() : []);
+  }, []);
 
   useEffect(() => {
     fetch("/api/api-keys").then(r => r.ok ? r.json() : []).then(setApiKeys);
     fetch("/api/settings/channels").then(r => r.ok ? r.json() : []).then(setChannels);
-    fetch("/api/projects").then(r => r.ok ? r.json() : []).then(setProjects);
-  }, []);
+    loadProjects();
+  }, [loadProjects]);
 
   const updateTrustThreshold = async (slug: string, threshold: number) => {
     // Optimistic update
@@ -635,6 +647,16 @@ export default function SettingsPage() {
   }, []);
 
   const t = useT();
+
+  // 归档项目：调 DELETE（后端是软归档，把 status 改为 archived）
+  const archiveProject = async (slug: string, name: string) => {
+    if (!confirm(t.adminArchiveConfirm(name))) return; // 二次确认，避免误点
+    const res = await fetch(`/api/admin/projects/${slug}`, { method: "DELETE" });
+    const json = await res.json();
+    // 不吞错误：例如"还有未处理 Insight"会返回 409，要把原因告诉用户
+    if (!json.ok) { alert(json.error); return; }
+    loadProjects(); // 重新拉列表，状态徽章会更新为 archived
+  };
 
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "channels",      label: t.settingsTabChannels,     icon: <Radio size={13} /> },
@@ -828,7 +850,8 @@ export default function SettingsPage() {
                 <h2 className="text-sm font-semibold text-white">{t.settingsProjectsTitle}</h2>
                 <p className="text-xs text-[#8B8B9E] mt-0.5">{t.settingsProjectsDesc}</p>
               </div>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-blue-600 text-white text-xs rounded-md transition-colors">
+              <button onClick={() => setShowNewProject(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3B82F6] hover:bg-blue-600 text-white text-xs rounded-md transition-colors">
                 <Plus size={13} /> {t.settingsAddProject}
               </button>
             </div>
@@ -876,13 +899,38 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0 self-start">
-                      <button className="p-1.5 rounded-md text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24]"><Edit2 size={13} /></button>
-                      <button className="p-1.5 rounded-md text-[#5A5A6E] hover:text-yellow-400 hover:bg-[#1A1A24]"><Archive size={13} /></button>
+                      <button onClick={() => setEditProject(p)} title={t.adminEdit}
+                        className="p-1.5 rounded-md text-[#5A5A6E] hover:text-white hover:bg-[#1A1A24]"><Edit2 size={13} /></button>
+                      <button onClick={() => archiveProject(p.slug, p.name)} title={t.adminArchive}
+                        className="p-1.5 rounded-md text-[#5A5A6E] hover:text-yellow-400 hover:bg-[#1A1A24]"><Archive size={13} /></button>
                     </div>
                   </div>
                 </div>
               );
             })}
+
+            {/* 新建项目对话框：点击"添加项目"后弹出，复用 /admin 页已有的 NewProjectDialog */}
+            {showNewProject && (
+              <NewProjectDialog
+                onClose={() => setShowNewProject(false)}
+                onSuccess={() => {
+                  setShowNewProject(false);
+                  loadProjects(); // 创建成功后重新拉取列表，让新项目立即出现
+                }}
+              />
+            )}
+
+            {/* 编辑项目对话框：点击某项目的"编辑"按钮后弹出 */}
+            {editProject && (
+              <EditProjectDialog
+                project={editProject}
+                onClose={() => setEditProject(null)}
+                onSuccess={() => {
+                  setEditProject(null);
+                  loadProjects(); // 保存成功后刷新列表，立即看到改动
+                }}
+              />
+            )}
           </div>
         )}
       </div>
