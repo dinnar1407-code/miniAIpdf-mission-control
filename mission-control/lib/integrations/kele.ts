@@ -225,3 +225,24 @@ export function detectKeleHealthIssues(s: KeleSummary): KeleHealthIssue | null {
   if (!problems.length) return null;
   return { severity, message: problems.join("；") };
 }
+
+// ── L1 组合回撤预警：从 Jarvis 自存的可靠权益序列峰值算回撤 ──
+// （可乐 /api/overview 的 equity_curve 按 ts 汇总、A股日线与加密/美股小时线 ts 不一致→失真，
+//   故 Jarvis 按小时存 totalEquity 自己的序列，13 资产齐全、可比）
+
+export const DRAWDOWN_HIGH = 0.05;     // 组合回撤 ≥5% → high
+export const DRAWDOWN_CRITICAL = 0.1;  // ≥10% → critical
+
+/**
+ * 给定窗口内峰值权益 + 当前权益，判断是否触发回撤告警（纯函数）。
+ * 无效输入或回撤不足阈值 → null。
+ */
+export function assessDrawdown(
+  peakEquity: number,
+  currentEquity: number
+): { drawdown: number; severity: "high" | "critical" } | null {
+  if (!(peakEquity > 0) || !(currentEquity >= 0)) return null;
+  const drawdown = (peakEquity - currentEquity) / peakEquity;
+  if (drawdown < DRAWDOWN_HIGH) return null;
+  return { drawdown, severity: drawdown >= DRAWDOWN_CRITICAL ? "critical" : "high" };
+}
