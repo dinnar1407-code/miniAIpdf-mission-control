@@ -16,6 +16,10 @@ const DEFAULT_KELE_BASE_URL = "https://app-production-d90b.up.railway.app";
 // 资产超过此时长没 tick 视为"数据停更"（可乐每小时 tick 一次，>3h = 连漏好几次）
 const STALE_MS = 3 * 60 * 60 * 1000;
 
+// 跑输 DCA 基准阈值：低于基准 ≥5% → 列为跑输；≥15% → critical
+const UNDERPERF_HIGH = 0.05;
+const UNDERPERF_CRITICAL = 0.15;
+
 // regime：0=死寂 1=牛市 2=恐慌（与可乐 signal/regime 对齐）
 const REGIME_LABEL: Record<number, { emoji: string; text: string }> = {
   0: { emoji: "💤", text: "死寂" },
@@ -29,6 +33,7 @@ interface KeleOverviewAsset {
   regime?: number;
   equity?: number;
   cash?: number;
+  baseline_equity?: number | null; // 同期无脑 DCA 基准权益（可乐 runtime 暴露）
 }
 
 interface KeleOverview {
@@ -52,6 +57,7 @@ export interface KeleSummary {
   panicAssets: string[];        // regime==2 的标的
   errorAssets: { symbol: string; error: string }[];
   staleAssets: string[];        // last_tick_ms 超过 STALE_MS 没更新的标的
+  underperformers: { symbol: string; equity: number; baseline: number; gap: number }[]; // 跑输 DCA 基准(gap=低于基准的比例)
 }
 
 function baseUrl(): string | null {
@@ -80,6 +86,7 @@ export async function fetchKeleSummary(): Promise<KeleSummary | null> {
     panicAssets: [] as string[],
     errorAssets: [] as { symbol: string; error: string }[],
     staleAssets: [] as string[],
+    underperformers: [] as { symbol: string; equity: number; baseline: number; gap: number }[],
   };
 
   try {
@@ -106,6 +113,7 @@ export async function fetchKeleSummary(): Promise<KeleSummary | null> {
     const panicAssets: string[] = [];
     const errorAssets: { symbol: string; error: string }[] = [];
     const staleAssets: string[] = [];
+    const underperformers: { symbol: string; equity: number; baseline: number; gap: number }[] = [];
     const now = Date.now();
 
     for (const [symbol, a] of entries) {
@@ -119,6 +127,17 @@ export async function fetchKeleSummary(): Promise<KeleSummary | null> {
       // last_tick_ms===0 = 刚播种还没首次 tick（重启后短暂状态），不算停更，避免误报
       if (typeof a.last_tick_ms === "number" && a.last_tick_ms > 0 && now - a.last_tick_ms > STALE_MS) {
         staleAssets.push(symbol);
+      }
+      // 跑输 DCA 基准：equity 低于 baseline_equity ≥阈值（baseline 需为正且可比）
+      if (
+        typeof a.equity === "number" &&
+        typeof a.baseline_equity === "number" &&
+        a.baseline_equity > 0
+      ) {
+        const gap = (a.baseline_equity - a.equity) / a.baseline_equity;
+        if (gap >= UNDERPERF_HIGH) {
+          underperformers.push({ symbol, equity: a.equity, baseline: a.baseline_equity, gap });
+        }
       }
     }
 
@@ -137,6 +156,7 @@ export async function fetchKeleSummary(): Promise<KeleSummary | null> {
       panicAssets,
       errorAssets,
       staleAssets,
+      underperformers,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : "unknown";
@@ -245,4 +265,25 @@ export function assessDrawdown(
   const drawdown = (peakEquity - currentEquity) / peakEquity;
   if (drawdown < DRAWDOWN_HIGH) return null;
   return { drawdown, severity: drawdown >= DRAWDOWN_CRITICAL ? "critical" : "high" };
+}
+
+// ── L1 跑输 DCA 基准预警：某些资产 equity 持续低于无脑 DCA 基准 ──
+/**
+ * 汇总跑输基准的资产 → 一条告警（纯函数）。无跑输返回 null。
+ * 严重度：任一资产跑输 ≥15% → critical，否则 high。
+ */
+export function detectUnderperformAlert(
+  underperformers: { symbol: string; gap: number }[]
+): { severity: "high" | "critical"; message: string } | null {
+  if (!underperformers.length) return null;
+  const severity = underperformers.some((u) => u.gap >= UNDERPERF_CRITICAL) ? "critical" : "high";
+  const parts = [...underperformers]
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, 6)
+    .map((u) => `${u.symbol} −${(u.gap * 100).toFixed(1)}%`);
+  const more = underperformers.length > 6 ? ` 等 ${underperformers.length} 个` : "";
+  return {
+    severity,
+    message: `${underperformers.length} 个资产跑输 DCA 基准：${parts.join("、")}${more}`,
+  };
 }

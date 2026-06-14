@@ -4,7 +4,7 @@ import { executeWorkflow } from "@/lib/workflow-engine";
 import { expireOldRequests } from "@/lib/approval";
 import { listConversations } from "@/lib/integrations/tidio";
 import { syncGARealtimeKpis } from "@/lib/integrations/ga";
-import { fetchKeleSummary, detectKeleHealthIssues, assessDrawdown } from "@/lib/integrations/kele";
+import { fetchKeleSummary, detectKeleHealthIssues, assessDrawdown, detectUnderperformAlert } from "@/lib/integrations/kele";
 import { sendTelegram } from "@/lib/telegram";
 
 // MiniAIPDF project ID — GA4 property is tracked against this project
@@ -237,6 +237,7 @@ export async function GET(req: NextRequest) {
     // 可乐自己宕了没法给自己报警——这里由 Jarvis 代为盯防。只读、写 Alert 去重、不触发自动计划。
     const keleHealth: { ok: boolean; issue?: string; alerted?: boolean } = { ok: true };
     const keleDrawdown: { tracked: boolean; equity?: number; drawdown?: number; alerted?: boolean } = { tracked: false };
+    const keleUnderperform: { count: number; alerted?: boolean } = { count: 0 };
     try {
       let kele = await fetchKeleSummary();
       // 单次打不通可能是网络抖动：重试一次，两次都失败才当真，降低误报
@@ -325,6 +326,32 @@ export async function GET(req: NextRequest) {
             }
           }
         }
+
+        // ——— 跑输 DCA 基准预警(L1)：资产 equity 持续低于无脑 DCA 基准 ———
+        if (kele.ok && kele.underperformers.length) {
+          keleUnderperform.count = kele.underperformers.length;
+          const up = detectUnderperformAlert(kele.underperformers);
+          if (up) {
+            const recentUp = await prisma.alert.findFirst({
+              where: {
+                source:    "kele_underperform",
+                status:    { in: ["new", "acknowledged"] },
+                createdAt: { gte: new Date(now.getTime() - 6 * 60 * 60 * 1000) },
+              },
+            });
+            if (!recentUp) {
+              await prisma.alert.create({
+                data: { projectId: null, severity: up.severity, source: "kele_underperform", message: `可乐${up.message}`, status: "new" },
+              });
+              void sendTelegram(
+                `📊 *可乐量化 · 跑输基准*\n\n${up.message}\n严重度: ${up.severity}\n` +
+                `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+              );
+              keleUnderperform.alerted = true;
+              console.log(`[Cron Hourly] 可乐跑输基准告警已发送: ${up.message}`);
+            }
+          }
+        }
       }
     } catch (err) {
       console.error("[Cron Hourly] 可乐健康监控失败:", err instanceof Error ? err.message : err);
@@ -341,6 +368,7 @@ export async function GET(req: NextRequest) {
       gaRealtime: gaStatus,
       keleHealth,
       keleDrawdown,
+      keleUnderperform,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
