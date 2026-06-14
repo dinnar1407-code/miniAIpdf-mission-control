@@ -24,14 +24,41 @@ export interface ClaudeResponse {
   error?: string;
 }
 
+// 单次 HTTP 请求超时（毫秒）。
+// 为什么是 30s：Vercel 路由有 maxDuration 上限（通常 60s），
+// 如果底层 fetch 永远不返回（网络挂起 / 上游卡住），整个 Serverless 函数会一直挂着，
+// 直到平台强制超时，既浪费配额又拿不到任何错误信息。
+// 把单次请求卡在 30s（小于路由 maxDuration），到点就主动中断，按失败处理，
+// 让上层能拿到明确的错误而不是无限等待。
+const FETCH_TIMEOUT_MS = 30_000;
+
+// 给一次 fetch 套上超时控制。
+// 原理：AbortController 是浏览器/Node 标准 API，它产生一个 signal；
+// 把 signal 传给 fetch，再用 setTimeout 在到点时调用 controller.abort()，
+// fetch 就会立刻 reject（抛出 AbortError），从而不会无限挂起。
+// 注意：无论成功还是失败，都要在 finally 里 clearTimeout，避免定时器泄漏。
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  // 到点后中断这次请求
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    // 把 abort 信号挂到 fetch 上；保留调用方传入的其它 init 字段
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    // 请求结束（成功/失败/中断）都要清掉定时器
+    clearTimeout(timer);
+  }
+}
+
 // Fix 6: 429 指数退避重试（最多 3 次：1s → 2s → 4s）
+// 现在底层用 fetchWithTimeout，每次重试都各自带 30s 超时，避免任何一次请求把函数挂死。
 async function fetchWithRetry(url: string, init: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, init);
+    const res = await fetchWithTimeout(url, init);
     if (res.status !== 429 || attempt === maxRetries) return res;
     await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
   }
-  return fetch(url, init);
+  return fetchWithTimeout(url, init);
 }
 
 // Fix 4: 所有请求都带 prompt-caching beta header

@@ -17,7 +17,7 @@ model Project {
   color       String   @default("#3B82F6")
   emoji       String   @default("📦")
   status               String   @default("active")
-  autoApproveThreshold Int      @default(1)
+  autoApproveThreshold Int      @default(0)
   createdAt            DateTime @default(now())
 
   tasks            Task[]

@@ -58,6 +58,13 @@ Observed at: ${obs.observedAt}`;
 const VALID_TYPES = new Set<string>(["anomaly", "opportunity", "risk", "trend", "milestone"]);
 const VALID_SEVERITIES = new Set<string>(["low", "medium", "high", "critical"]);
 
+// 单次运行最多处理多少条观测数据（每条都要调一次 LLM）。
+// 为什么要这个上限：每条 observation 都会触发一次付费的 LLM 调用，
+// 如果某次传进来上千条，会一口气烧掉大量 token / 费用，也可能撞上路由超时。
+// 设成 25 条作为「安全闸」：超出的部分这次先跳过并记日志，下次运行再处理，
+// 既控制单次成本，又不会静默丢数据（日志里能看到被跳过多少）。
+const MAX_OBSERVATIONS_PER_RUN = 25;
+
 function stripFences(raw: string): string {
   // Strip ```json ... ``` or ``` ... ``` wrappers that some models add
   return raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -105,15 +112,32 @@ async function isDuplicate(obs: RawObservation): Promise<boolean> {
 export async function generateInsights(
   observations: RawObservation[]
 ): Promise<InsightGeneratorResult> {
+  // 批量上限保护：本次最多处理 MAX_OBSERVATIONS_PER_RUN 条。
+  // slice(0, N) 取前 N 条；剩下的这次不处理，下面单独记日志说明跳过了多少，
+  // 避免一次运行调用过多 LLM 把成本/时间烧爆。
+  const toProcess = observations.slice(0, MAX_OBSERVATIONS_PER_RUN);
+  const overflow = observations.length - toProcess.length;
+  if (overflow > 0) {
+    console.warn(
+      JSON.stringify({
+        event:   "insight_generator_batch_capped",
+        total:   observations.length,   // 实际传进来的总数
+        limit:   MAX_OBSERVATIONS_PER_RUN, // 单次上限
+        skipped: overflow,               // 这次被跳过、留待下次处理的条数
+        ts:      new Date().toISOString(),
+      })
+    );
+  }
+
   const result: InsightGeneratorResult = {
-    processed: observations.length,
+    processed: toProcess.length,
     created: 0,
     skipped: 0,
     errors: 0,
   };
   const createdIds: string[] = [];
 
-  for (const obs of observations) {
+  for (const obs of toProcess) {
     try {
       if (await isDuplicate(obs)) {
         result.skipped++;

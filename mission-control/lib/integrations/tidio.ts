@@ -190,9 +190,16 @@ export async function getPendingConversationsSummary(): Promise<{
   pendingCount: number;
   topMessages:  Array<{ id: string; contact: string; preview: string; created_at: string }>;
 }> {
+  // 注意（fail-fast，不再静默吞错）：
+  // 这里以前对两个 list 调用各加了 `.catch(() => ({ conversations: [], total: 0 }))`，
+  // 一旦 Tidio API 网络抖动或报错，就会"假装"返回 0 个 open / 0 个 pending。
+  // 上层 Observer 会把"突然变成 0"误判为指标暴跌，触发虚假洞察/告警。
+  // 因此这里去掉静默兜底：如果某次请求失败，Promise.all 会 reject，
+  // 错误向上抛出，交给调用方（如 agent-tools 的工具执行器、cron）去 catch 并跳过本次写入，
+  // 从而保留上一个真实快照，而不是把一次抖动写成 0。
   const [openResult, pendingResult] = await Promise.all([
-    listConversations({ status: "open",    limit: 50 }).catch(() => ({ conversations: [], total: 0 })),
-    listConversations({ status: "pending", limit: 50 }).catch(() => ({ conversations: [], total: 0 })),
+    listConversations({ status: "open",    limit: 50 }),
+    listConversations({ status: "pending", limit: 50 }),
   ]);
 
   const topMessages = [...openResult.conversations, ...pendingResult.conversations]

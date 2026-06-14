@@ -130,7 +130,14 @@ function generateJWT(serviceAccount: GoogleServiceAccount): string {
 
   const sign = crypto.createSign('RSA-SHA256');
   sign.update(signatureInput);
-  const signature = base64urlEncode(sign.sign(serviceAccount.private_key, 'base64'));
+  // 修复二次编码 bug：
+  // 之前写法是 base64urlEncode(sign.sign(key, 'base64'))，sign.sign(key, 'base64')
+  // 已经返回了一个 base64 字符串，再丢进 base64urlEncode 会把这串文本当成普通字符
+  // 再编码一次（即把签名“当成数据”又 base64 了一遍），导致最终签名是损坏的。
+  // Google 用公钥验签时会失败 → 拿不到 access token → 指标静默全部为 0。
+  // 正确做法：让 sign.sign 直接输出原始签名 Buffer（不传第二个参数），
+  // 再用 Node 内置的 'base64url' 编码一次性转成 URL 安全的 base64（自带去掉 padding）。
+  const signature = sign.sign(serviceAccount.private_key).toString('base64url');
 
   return `${signatureInput}.${signature}`;
 }
@@ -170,31 +177,29 @@ async function getGoogleAccessToken(): Promise<string | null> {
 
 /**
  * Fetches GA4 metrics for the specified number of days
+ *
+ * 返回值语义（关键改动）：
+ * - 返回 null  → 表示“没配置”（缺环境变量），调用方应当跳过、不写库；这不是错误。
+ * - 抛出异常   → 表示“配置了但拉取失败”（鉴权失败 / API 报错），调用方应当跳过写库并记为失败。
+ * - 返回对象   → 拉取成功，真实指标。
+ *
+ * 之前的 bug：无论哪种失败都 return 全 0 的对象，结果把“假的 0”写进了数据库，
+ * 让仪表盘看起来“数据是真的 0”，掩盖了 token 损坏等真实故障。现在改为：
+ * 未配置返回 null（静默跳过），真失败直接抛错（让 sync 记为失败、不写 0）。
  */
-export async function fetchGAMetrics(days: number = 30): Promise<GAMetrics> {
+export async function fetchGAMetrics(days: number = 30): Promise<GAMetrics | null> {
+  // 未配置：不是错误，返回 null 让调用方静默跳过（不写库）
   if (!validateGA4Config()) {
-    return {
-      sessions: 0,
-      users: 0,
-      pageviews: 0,
-      bounceRate: 0,
-      avgSessionDuration: 0,
-    };
+    return null;
+  }
+
+  const accessToken = await getGoogleAccessToken();
+  if (!accessToken) {
+    // 配置了却拿不到 token（很可能就是 JWT 签名损坏）——这是真故障，抛错让 sync 跳过写库
+    throw new Error('Failed to obtain Google access token (GA4)');
   }
 
   try {
-    const accessToken = await getGoogleAccessToken();
-    if (!accessToken) {
-      console.error('Failed to obtain Google access token');
-      return {
-        sessions: 0,
-        users: 0,
-        pageviews: 0,
-        bounceRate: 0,
-        avgSessionDuration: 0,
-      };
-    }
-
     const propertyId = process.env.GA_PROPERTY_ID!;
     const endDate = new Date();
     const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
@@ -247,6 +252,8 @@ export async function fetchGAMetrics(days: number = 30): Promise<GAMetrics> {
       };
     }
 
+    // 走到这里说明 API 调用成功、但响应里没有 totals（即区间内确实没有任何流量），
+    // 这种“真实的 0”是合法数据，可以照常返回 0 写库。
     return {
       sessions: 0,
       users: 0,
@@ -255,14 +262,10 @@ export async function fetchGAMetrics(days: number = 30): Promise<GAMetrics> {
       avgSessionDuration: 0,
     };
   } catch (error) {
+    // 关键改动：拉取过程中出错（网络/HTTP 非 200/JSON 解析等）属于真故障，
+    // 不能再吞掉错误 return 全 0，否则会把假的 0 写进库。这里向上抛，让 sync 跳过写库。
     console.error('Error fetching GA4 metrics:', error);
-    return {
-      sessions: 0,
-      users: 0,
-      pageviews: 0,
-      bounceRate: 0,
-      avgSessionDuration: 0,
-    };
+    throw error;
   }
 }
 
@@ -270,59 +273,65 @@ export async function fetchGAMetrics(days: number = 30): Promise<GAMetrics> {
  * Syncs GA4 KPIs to database
  */
 export async function syncGAKpis(projectId: string | null = null): Promise<void> {
-  try {
-    const metrics = await fetchGAMetrics(30);
+  // 注意：这里不再用 try/catch 把错误吞掉。
+  // - fetchGAMetrics 返回 null（未配置）→ 直接 return 跳过，不写库。
+  // - fetchGAMetrics 抛错（真故障）→ 让错误自然向上冒泡到调用方（cron daily 的 try/catch），
+  //   由 cron 把这次同步标记为失败（kpiStatus.ga = { ok: false }），而不是写入一堆假的 0。
+  const metrics = await fetchGAMetrics(30);
 
-    await Promise.all([
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'ga_sessions',
-          value: metrics.sessions,
-          source: 'ga4',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'ga_users',
-          value: metrics.users,
-          source: 'ga4',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'ga_pageviews',
-          value: metrics.pageviews,
-          source: 'ga4',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'ga_bounce_rate',
-          value: metrics.bounceRate,
-          source: 'ga4',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'ga_avg_session_duration',
-          value: metrics.avgSessionDuration,
-          source: 'ga4',
-          date: new Date(),
-        },
-      }),
-    ]);
-  } catch (error) {
-    console.error('Error syncing GA4 KPIs:', error);
+  // 未配置：静默跳过，不写任何快照
+  if (!metrics) {
+    console.warn('GA4 未配置，跳过 KPI 同步');
+    return;
   }
+
+  await Promise.all([
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'ga_sessions',
+        value: metrics.sessions,
+        source: 'ga4',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'ga_users',
+        value: metrics.users,
+        source: 'ga4',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'ga_pageviews',
+        value: metrics.pageviews,
+        source: 'ga4',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'ga_bounce_rate',
+        value: metrics.bounceRate,
+        source: 'ga4',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'ga_avg_session_duration',
+        value: metrics.avgSessionDuration,
+        source: 'ga4',
+        date: new Date(),
+      },
+    }),
+  ]);
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -131,7 +131,14 @@ function generateJWT(serviceAccount: GoogleServiceAccount): string {
 
   const sign = crypto.createSign('RSA-SHA256');
   sign.update(signatureInput);
-  const signature = base64urlEncode(sign.sign(serviceAccount.private_key, 'base64'));
+  // 修复二次编码 bug：
+  // 之前写法是 base64urlEncode(sign.sign(key, 'base64'))，sign.sign(key, 'base64')
+  // 已经返回了一个 base64 字符串，再丢进 base64urlEncode 会把这串文本当成普通字符
+  // 再编码一次（即把签名“当成数据”又 base64 了一遍），导致最终签名是损坏的。
+  // Google 用公钥验签时会失败 → 拿不到 access token → 指标静默全部为 0。
+  // 正确做法：让 sign.sign 直接输出原始签名 Buffer（不传第二个参数），
+  // 再用 Node 内置的 'base64url' 编码一次性转成 URL 安全的 base64（自带去掉 padding）。
+  const signature = sign.sign(serviceAccount.private_key).toString('base64url');
 
   return `${signatureInput}.${signature}`;
 }
@@ -171,19 +178,28 @@ export async function getGoogleAccessToken(): Promise<string | null> {
 
 /**
  * Fetches GSC data for the specified number of days
+ *
+ * 返回值语义（关键改动）：
+ * - 返回 null      → “没配置”（缺环境变量），调用方应跳过、不写库；这不是错误。
+ * - 抛出异常       → “配置了但拉取失败”（鉴权失败 / API 报错），调用方应跳过写库并记为失败。
+ * - 返回数组       → 拉取成功（空数组也合法，表示区间内没有任何查询数据）。
+ *
+ * 之前的 bug：失败时一律 return []，结果 syncGSCKpis 会把空数组当成“真的没数据”
+ * 而静默跳过（且看不出是故障）。现在区分“未配置”和“真失败”，避免掩盖 token 损坏等问题。
  */
-export async function fetchGSCData(days: number = 30): Promise<GSCRow[]> {
+export async function fetchGSCData(days: number = 30): Promise<GSCRow[] | null> {
+  // 未配置：不是错误，返回 null 让调用方静默跳过（不写库）
   if (!validateGSCConfig()) {
-    return [];
+    return null;
+  }
+
+  const accessToken = await getGoogleAccessToken();
+  if (!accessToken) {
+    // 配置了却拿不到 token（很可能就是 JWT 签名损坏）——这是真故障，抛错让 sync 跳过写库
+    throw new Error('Failed to obtain Google access token (GSC)');
   }
 
   try {
-    const accessToken = await getGoogleAccessToken();
-    if (!accessToken) {
-      console.error('Failed to obtain Google access token');
-      return [];
-    }
-
     const siteUrl = process.env.GSC_SITE_URL!;
     const endDate = new Date();
     const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
@@ -230,8 +246,10 @@ export async function fetchGSCData(days: number = 30): Promise<GSCRow[]> {
 
     return rows;
   } catch (error) {
+    // 关键改动：拉取过程中出错（网络/HTTP 非 200/JSON 解析等）属于真故障，
+    // 不能再吞掉错误 return []，否则会被当成“真的没数据”而静默跳过。向上抛，让 sync 记为失败。
     console.error('Error fetching GSC data:', error);
-    return [];
+    throw error;
   }
 }
 
@@ -241,6 +259,11 @@ export async function fetchGSCData(days: number = 30): Promise<GSCRow[]> {
 export async function getTopKeywords(limit: number = 50): Promise<GSCRow[]> {
   try {
     const rows = await fetchGSCData(30);
+    // fetchGSCData 现在可能返回 null（未配置）。这是给 UI 展示用的只读路径，
+    // 拿不到数据就返回空数组即可，不涉及写库，无需把错误向上抛。
+    if (!rows) {
+      return [];
+    }
     return rows
       .sort((a, b) => b.clicks - a.clicks)
       .slice(0, limit);
@@ -254,73 +277,80 @@ export async function getTopKeywords(limit: number = 50): Promise<GSCRow[]> {
  * Syncs GSC KPIs to database
  */
 export async function syncGSCKpis(projectId: string | null = null): Promise<void> {
-  try {
-    const data = await fetchGSCData(30);
+  // 注意：这里不再用 try/catch 把错误吞掉。
+  // - fetchGSCData 返回 null（未配置）→ 直接 return 跳过，不写库。
+  // - fetchGSCData 抛错（真故障）→ 让错误自然向上冒泡到调用方（cron daily 的 try/catch），
+  //   由 cron 把这次同步标记为失败（kpiStatus.gsc = { ok: false }），而不是静默跳过。
+  const data = await fetchGSCData(30);
 
-    if (data.length === 0) {
-      console.warn('No GSC data fetched');
-      return;
-    }
-
-    // Calculate aggregate metrics
-    const totalClicks = data.reduce((sum, row) => sum + row.clicks, 0);
-    const totalImpressions = data.reduce((sum, row) => sum + row.impressions, 0);
-    const avgCTR = data.length > 0
-      ? Number((data.reduce((sum, row) => sum + row.ctr, 0) / data.length).toFixed(2))
-      : 0;
-    const avgPosition = data.length > 0
-      ? Number((data.reduce((sum, row) => sum + row.position, 0) / data.length).toFixed(2))
-      : 0;
-
-    // Write snapshots
-    await Promise.all([
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'gsc_total_clicks',
-          value: totalClicks,
-          source: 'gsc',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'gsc_total_impressions',
-          value: totalImpressions,
-          source: 'gsc',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'gsc_avg_ctr',
-          value: avgCTR,
-          source: 'gsc',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'gsc_avg_position',
-          value: avgPosition,
-          source: 'gsc',
-          date: new Date(),
-        },
-      }),
-      prisma.kpiSnapshot.create({
-        data: {
-          projectId,
-          metric: 'gsc_unique_queries',
-          value: data.length,
-          source: 'gsc',
-          date: new Date(),
-        },
-      }),
-    ]);
-  } catch (error) {
-    console.error('Error syncing GSC KPIs:', error);
+  // 未配置：静默跳过，不写任何快照
+  if (!data) {
+    console.warn('GSC 未配置，跳过 KPI 同步');
+    return;
   }
+
+  // 拉取成功但区间内没有任何查询数据：这是真实的“无数据”，跳过写库即可
+  if (data.length === 0) {
+    console.warn('No GSC data fetched');
+    return;
+  }
+
+  // Calculate aggregate metrics
+  const totalClicks = data.reduce((sum, row) => sum + row.clicks, 0);
+  const totalImpressions = data.reduce((sum, row) => sum + row.impressions, 0);
+  const avgCTR = data.length > 0
+    ? Number((data.reduce((sum, row) => sum + row.ctr, 0) / data.length).toFixed(2))
+    : 0;
+  const avgPosition = data.length > 0
+    ? Number((data.reduce((sum, row) => sum + row.position, 0) / data.length).toFixed(2))
+    : 0;
+
+  // Write snapshots
+  await Promise.all([
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'gsc_total_clicks',
+        value: totalClicks,
+        source: 'gsc',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'gsc_total_impressions',
+        value: totalImpressions,
+        source: 'gsc',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'gsc_avg_ctr',
+        value: avgCTR,
+        source: 'gsc',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'gsc_avg_position',
+        value: avgPosition,
+        source: 'gsc',
+        date: new Date(),
+      },
+    }),
+    prisma.kpiSnapshot.create({
+      data: {
+        projectId,
+        metric: 'gsc_unique_queries',
+        value: data.length,
+        source: 'gsc',
+        date: new Date(),
+      },
+    }),
+  ]);
 }
