@@ -5,7 +5,11 @@ import { prisma }                          from "@/lib/db";
 import { planFromInsight }                 from "@/lib/planner";
 import { createMissionFromPlan }           from "@/lib/mission-orchestrator";
 import { answerCallbackQuery,
-         editTelegramMessage }             from "@/lib/telegram";
+         editTelegramMessage,
+         sendTelegramWithButtons }         from "@/lib/telegram";
+import { getShiquClient,
+         getShiquProjectId }               from "@/lib/integrations/shiqu";
+import { writeMemory }                     from "@/lib/memory";
 
 export const maxDuration = 60;
 
@@ -117,6 +121,104 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             cbChat, msgId,
             `❌ *已拒绝执行*\n\n📋 Plan \`${planId.slice(-8)}\`\n由 @${cbUser} 拒绝`
           );
+        }
+
+      // ── 拾趣审核：批准下架（阶段3 交互审批）──────────────────────────────────
+      } else if (data.startsWith("shiqu_remove:")) {
+        const reqId = data.slice("shiqu_remove:".length);
+
+        // 原子抢占：只有仍是 pending 才能抢到 → 防止重复点击/Telegram 重发导致重复下架
+        const claim = await prisma.shiquModerationRequest.updateMany({
+          where: { id: reqId, status: "pending" },
+          data:  { status: "processing", decidedBy: `telegram:${cbUser}`, decidedAt: new Date() },
+        });
+        if (claim.count === 0) {
+          if (cbChat && msgId) await editTelegramMessage(cbChat, msgId, "⚠️ 此审核请求已处理");
+          return NextResponse.json({ ok: true });
+        }
+
+        const reqRow = await prisma.shiquModerationRequest.findUnique({ where: { id: reqId } });
+        // 调拾趣 admin API 执行下架（人类已签字）
+        const shiqu  = await getShiquClient();
+        const ok     = shiqu && reqRow ? await shiqu.removeContent(Number(reqRow.shiquModId)) : false;
+
+        if (ok && reqRow) {
+          await prisma.shiquModerationRequest.update({ where: { id: reqId }, data: { status: "removed" } });
+          if (cbChat && msgId) {
+            await editTelegramMessage(
+              cbChat, msgId,
+              `✅ *已下架*\n\n${reqRow.targetTitle}\n由 @${cbUser} 批准（可在拾趣运营台恢复）`
+            );
+          }
+          // 学习飞轮：把「人工确认下架」写入 Memory，供日后审核参考
+          try {
+            const projectId = await getShiquProjectId();
+            await writeMemory({
+              projectId:   projectId ?? undefined,
+              kind:        "feedback_lesson",
+              content:     `拾趣审核：${reqRow.targetType}「${reqRow.targetTitle}」因「${reqRow.aiReason}」被人工确认下架。`,
+              sourceTable: "ShiquModerationRequest",
+              sourceId:    reqRow.id,
+              metadata:    { decision: "removed", targetType: reqRow.targetType, aiReason: reqRow.aiReason },
+            });
+          } catch (err) {
+            console.error("[TG callback] shiqu writeMemory(removed) failed:", String(err));
+          }
+        } else {
+          // 下架失败：回退为 pending 并重发带按钮的消息，让你能重试（修复"失败即卡死"）
+          await prisma.shiquModerationRequest.update({
+            where: { id: reqId },
+            data:  { status: "pending", decidedBy: null, decidedAt: null },
+          });
+          if (cbChat && msgId) {
+            await editTelegramMessage(cbChat, msgId, `❌ 下架失败：${reqRow?.targetTitle ?? reqId}`);
+          }
+          await sendTelegramWithButtons(
+            `🛡️ *拾趣审核 · 下架失败，请重试*\n\n${reqRow?.targetTitle ?? ""}\nAI 理由：${reqRow?.aiReason ?? ""}`,
+            [[
+              { text: "✅ 重试下架", callback_data: `shiqu_remove:${reqId}` },
+              { text: "↩️ 保留",     callback_data: `shiqu_keep:${reqId}` },
+            ]]
+          );
+        }
+
+      // ── 拾趣审核：保留（AI 误报，人工判定正常）─────────────────────────────────
+      } else if (data.startsWith("shiqu_keep:")) {
+        const reqId = data.slice("shiqu_keep:".length);
+
+        // 原子抢占（同上）：只有仍是 pending 才能改成 kept
+        const claim = await prisma.shiquModerationRequest.updateMany({
+          where: { id: reqId, status: "pending" },
+          data:  { status: "kept", decidedBy: `telegram:${cbUser}`, decidedAt: new Date() },
+        });
+        if (claim.count === 0) {
+          if (cbChat && msgId) await editTelegramMessage(cbChat, msgId, "⚠️ 此审核请求已处理");
+          return NextResponse.json({ ok: true });
+        }
+
+        const reqRow = await prisma.shiquModerationRequest.findUnique({ where: { id: reqId } });
+        if (cbChat && msgId) {
+          await editTelegramMessage(
+            cbChat, msgId,
+            `↩️ *已保留*\n\n${reqRow?.targetTitle ?? ""}\n由 @${cbUser} 判定为正常`
+          );
+        }
+
+        // 学习飞轮：人工判定「保留」（AI 误报）同样是宝贵教训
+        if (reqRow) {
+          try {
+            const projectId = await getShiquProjectId();
+            await writeMemory({
+              projectId:   projectId ?? undefined,
+              kind:        "feedback_lesson",
+              content:     `拾趣审核：${reqRow.targetType}「${reqRow.targetTitle}」被 AI 以「${reqRow.aiReason}」标记，但人工判定为正常、予以保留（AI 误报）。`,
+              sourceTable: "ShiquModerationRequest",
+              sourceId:    reqRow.id,
+              metadata:    { decision: "kept", targetType: reqRow.targetType, aiReason: reqRow.aiReason },
+            });
+          } catch (err) {
+            console.error("[TG callback] shiqu writeMemory(kept) failed:", String(err));
+          }
         }
       }
 

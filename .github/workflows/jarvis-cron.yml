@@ -17,6 +17,7 @@ on:
     - cron: "0 * * * *"    # hourly   —— 每小时整点：每小时工作流、过期审批、API 状态、GA4 异常检测
     - cron: "0 9 * * *"    # daily    —— 每天 09:00 UTC：每日工作流、KPI 同步、邮件滴灌、天使客户扫描
     - cron: "0 10 * * *"   # social   —— 每天 10:00 UTC：社媒发布工作流
+    - cron: "0 11 * * *"   # shiqu-moderation —— 每天 11:00 UTC：拾趣 KPI 同步 + 审核提案推 Telegram（阶段3）
     - cron: "0 8 * * 1"    # weekly   —— 每周一 08:00 UTC：每周工作流
                            #   （原 Vercel 配的是 "0 3 * * *" 每天，但该端点本意是每周一、代码无周一门控，
                            #    等于让“每周任务”每天跑 7 次，是个隐藏 bug。这里改为真正的周一。）
@@ -36,6 +37,7 @@ on:
           - daily
           - social
           - weekly
+          - shiqu-moderation
 
 # 并发控制：按命中的端点分组，避免同一端点上次没跑完又叠一次。
 # 定时任务通常不希望取消正在跑的，所以 cancel-in-progress 设 false。
@@ -74,12 +76,13 @@ jobs:
               "0 * * * *")  NAME=hourly   ;;
               "0 9 * * *")  NAME=daily    ;;
               "0 10 * * *") NAME=social   ;;
+              "0 11 * * *") NAME=shiqu-moderation ;;
               "0 8 * * 1")  NAME=weekly   ;;
               *) echo "未知 schedule: '$SCHEDULE'"; exit 1 ;;   # 大声失败，避免静默错配
             esac
           else
             case "$ENDPOINT_INPUT" in
-              briefing|hourly|daily|social|weekly) NAME="$ENDPOINT_INPUT" ;;
+              briefing|hourly|daily|social|weekly|shiqu-moderation) NAME="$ENDPOINT_INPUT" ;;
               *) echo "未知 endpoint 输入: '$ENDPOINT_INPUT'"; exit 1 ;;
             esac
           fi

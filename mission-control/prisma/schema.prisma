@@ -592,3 +592,22 @@ model Playbook {
 
   @@index([projectId, isActive])
 }
+
+// 拾趣审核交互审批记录（阶段3）：
+// 每条违规嫌疑推一条 Telegram 审批 → 落一行 pending；用户点按钮后回调更新 status。
+// shiquModId 唯一，保证「同一条违规只提案一次」（cron 幂等）。
+model ShiquModerationRequest {
+  id            String    @id @default(cuid())
+  shiquModId    String    @unique          // 拾趣侧 moderation 行 id（下架时用它）
+  targetType    String                      // "goods" | "note"
+  targetTitle   String
+  aiReason      String                      // 拾趣站内 AI 标记理由
+  status        String    @default("pending") // pending / removed / kept
+  telegramMsgId String?                     // 推送消息的 message_id（预留，便于后续编辑）
+  decidedBy     String?                     // "telegram:<username>"
+  decidedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
