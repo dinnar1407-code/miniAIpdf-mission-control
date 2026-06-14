@@ -6,6 +6,25 @@ import { listConversations } from "@/lib/integrations/tidio";
 import { syncGARealtimeKpis } from "@/lib/integrations/ga";
 import { fetchKeleSummary, detectKeleHealthIssues, assessDrawdown, detectUnderperformAlert } from "@/lib/integrations/kele";
 import { sendTelegram } from "@/lib/telegram";
+import { llmCall } from "@/lib/llm";
+
+/** L1 可选增强：给可乐告警生成一句 Claude 解读；失败返回空串，绝不阻断告警。 */
+async function keleInterpret(kind: string, detail: string): Promise<string> {
+  try {
+    const r = await llmCall({
+      task: "fast",
+      systemPrompt:
+        "你是量化交易运维助手。针对给定告警，用一句中文(≤40字)点评其可能含义与该关注什么。直接给点评，不复述原文、不寒暄。",
+      userPrompt: `告警类型：${kind}\n内容：${detail}`,
+      maxTokens: 120,
+      temperature: 0.3,
+    });
+    const line = (r.content || "").trim().split("\n")[0].slice(0, 80);
+    return line ? `\n\n💡 ${line}` : "";
+  } catch {
+    return ""; // LLM 失败不影响告警发送
+  }
+}
 
 // MiniAIPDF project ID — GA4 property is tracked against this project
 const MINIAIPDF_ID = "cmo21zrhd00029rvsyv1n2you";
@@ -272,7 +291,8 @@ export async function GET(req: NextRequest) {
               `🩺 *可乐量化 · 健康告警*\n\n` +
               `${issue.message}\n\n` +
               `严重度: ${issue.severity}\n` +
-              `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+              `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}` +
+              (await keleInterpret("可乐健康异常", issue.message))
             );
             keleHealth.alerted = true;
             console.log(`[Cron Hourly] 可乐健康告警已发送: ${issue.message}`);
@@ -319,7 +339,8 @@ export async function GET(req: NextRequest) {
               });
               void sendTelegram(
                 `📉 *可乐量化 · 回撤预警*\n\n${msg}\n严重度: ${dd.severity}\n` +
-                `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+                `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}` +
+                (await keleInterpret("组合回撤", msg))
               );
               keleDrawdown.alerted = true;
               console.log(`[Cron Hourly] 可乐回撤告警已发送: ${msg}`);
@@ -345,7 +366,8 @@ export async function GET(req: NextRequest) {
               });
               void sendTelegram(
                 `📊 *可乐量化 · 跑输基准*\n\n${up.message}\n严重度: ${up.severity}\n` +
-                `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}`
+                `时间: ${now.toLocaleTimeString("zh-CN", { timeZone: "Asia/Shanghai" })}` +
+                (await keleInterpret("跑输DCA基准", up.message))
               );
               keleUnderperform.alerted = true;
               console.log(`[Cron Hourly] 可乐跑输基准告警已发送: ${up.message}`);
