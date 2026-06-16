@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendTelegram } from "@/lib/telegram";
 import { fetchKeleSummary, formatKeleBriefingLines } from "@/lib/integrations/kele";
+import { fetchTopNews, formatNewsLines } from "@/lib/integrations/news";
 
 export const maxDuration = 60;
 
@@ -154,6 +155,17 @@ export async function GET(req: NextRequest) {
       }
     } catch (err) {
       console.error("[Cron Briefing] 可乐摘要失败:", err);
+    }
+
+    // ——— 市场要闻（免费 Google News RSS；只读情境，绝不进交易决策；失败不打断简报）———
+    try {
+      const news = await fetchTopNews(4);
+      if (news.length) {
+        lines.push("");
+        lines.push(...formatNewsLines(news));
+      }
+    } catch (err) {
+      console.error("[Cron Briefing] 市场要闻失败:", err);
     }
 
     lines.push("");
