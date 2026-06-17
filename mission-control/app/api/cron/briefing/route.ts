@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendTelegram } from "@/lib/telegram";
-import { fetchKeleSummary, formatKeleBriefingLines } from "@/lib/integrations/kele";
+import {
+  fetchKeleSummary,
+  formatKeleBriefingLines,
+  fetchKeleVerdict,
+  formatVerdictBriefingLines,
+} from "@/lib/integrations/kele";
 import { fetchTopNews, formatNewsLines } from "@/lib/integrations/news";
 
 export const maxDuration = 60;
@@ -155,6 +160,20 @@ export async function GET(req: NextRequest) {
       }
     } catch (err) {
       console.error("[Cron Briefing] 可乐摘要失败:", err);
+    }
+
+    // ——— P0 前向判决（策略 vs 无脑 DCA；平时一行倒计时，越线则升级真判决）———
+    try {
+      const verdict = await fetchKeleVerdict();
+      if (verdict) {
+        const vlines = formatVerdictBriefingLines(verdict);
+        if (vlines.length) {
+          lines.push("");
+          lines.push(...vlines);
+        }
+      }
+    } catch (err) {
+      console.error("[Cron Briefing] P0 判决失败:", err);
     }
 
     // ——— 市场要闻（免费 Google News RSS；只读情境，绝不进交易决策；失败不打断简报）———
