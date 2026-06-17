@@ -287,3 +287,126 @@ export function detectUnderperformAlert(
     message: `${underperformers.length} 个资产跑输 DCA 基准：${parts.join("、")}${more}`,
   };
 }
+
+// ── 前向战绩判决（P0 验证：策略 vs 无脑 DCA）──
+// 读可乐 /api/verdict（真·样本外记分牌）。<14 天样本判"数据不足"——不拿运气当本事。
+
+const MIN_VERDICT_DAYS = 14; // 与可乐后端 MIN_DAYS_FOR_VERDICT 对齐
+
+interface KeleVerdictAssetRaw {
+  symbol: string;
+  days?: number;
+  excess_pct?: number;
+  win_ratio?: number;
+  label?: string;
+}
+interface KeleVerdictRaw {
+  portfolio?: { excess_pct?: number; counts?: Record<string, number>; n_assets?: number };
+  assets?: KeleVerdictAssetRaw[];
+}
+
+export interface KeleVerdict {
+  ok: boolean;
+  error?: string;
+  nAssets: number;
+  counts: Record<string, number>; // {跑赢,跑输,胶着,数据不足}
+  decided: { symbol: string; label: string; excessPct: number; winRatio: number }[]; // 跑赢/跑输/胶着
+  closestPending: { symbol: string; daysLeft: number } | null; // 最快越 14 天线的"数据不足"标的
+}
+
+/**
+ * 拉取可乐前向判决。永不抛错——失败返回 { ok:false }。集成关闭时返回 null。
+ */
+export async function fetchKeleVerdict(): Promise<KeleVerdict | null> {
+  const base = baseUrl();
+  if (!base) return null;
+
+  const empty = {
+    nAssets: 0,
+    counts: {} as Record<string, number>,
+    decided: [] as KeleVerdict["decided"],
+    closestPending: null as KeleVerdict["closestPending"],
+  };
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`${base}/api/verdict`, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    }).finally(() => clearTimeout(timer));
+
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, ...empty };
+
+    const data = (await res.json()) as KeleVerdictRaw;
+    const assets = data.assets ?? [];
+    const decided: KeleVerdict["decided"] = [];
+    let closest: { symbol: string; daysLeft: number } | null = null;
+
+    for (const a of assets) {
+      const label = a.label ?? "数据不足";
+      if (label === "数据不足") {
+        const days = typeof a.days === "number" ? a.days : 0;
+        const daysLeft = Math.max(0, Math.ceil(MIN_VERDICT_DAYS - days));
+        // 记录"最快越线"的那个（剩余天数最少）
+        if (closest === null || daysLeft < closest.daysLeft) {
+          closest = { symbol: a.symbol, daysLeft };
+        }
+      } else {
+        decided.push({
+          symbol: a.symbol,
+          label,
+          excessPct: typeof a.excess_pct === "number" ? a.excess_pct : 0,
+          winRatio: typeof a.win_ratio === "number" ? a.win_ratio : 0,
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      nAssets: data.portfolio?.n_assets ?? assets.length,
+      counts: data.portfolio?.counts ?? {},
+      decided,
+      closestPending: closest,
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "unknown";
+    console.error("[kele] fetchKeleVerdict 失败:", error);
+    return { ok: false, error, ...empty };
+  }
+}
+
+/**
+ * 判决段落（Markdown 行）。设计：平时不刷屏——全"数据不足"只给一行倒计时；
+ * 一旦有标的越 14 天线就升级成真判决（跑赢/跑输都报）。连不上返回 []（不污染简报）。
+ */
+export function formatVerdictBriefingLines(v: KeleVerdict): string[] {
+  if (!v.ok) return []; // 连接性问题由"可乐量化"段覆盖，判决段不重复报
+
+  // 还没有任何标的够样本下判决（全在攒数据）→ 一行倒计时
+  if (v.decided.length === 0) {
+    const tail = v.closestPending
+      ? `，最快 ${v.closestPending.symbol} 还差 ${v.closestPending.daysLeft} 天越 ${MIN_VERDICT_DAYS} 天线`
+      : "";
+    return [`🧪 P0 判决：${v.nAssets} 标的仍在攒前向数据${tail}`];
+  }
+
+  // 已有判决：跑赢优先 → 跑输 → 胶着；同类按超额从高到低
+  const order: Record<string, number> = { 跑赢: 0, 跑输: 1, 胶着: 2 };
+  const emoji: Record<string, string> = { 跑赢: "✅", 跑输: "❌", 胶着: "➖" };
+  const sorted = [...v.decided].sort(
+    (a, b) => (order[a.label] ?? 9) - (order[b.label] ?? 9) || b.excessPct - a.excessPct
+  );
+
+  const lines = ["*⚖️ P0 判决更新*"];
+  for (const d of sorted.slice(0, 8)) {
+    const sign = d.excessPct >= 0 ? "+" : "";
+    lines.push(
+      `${emoji[d.label] ?? "•"} ${d.symbol} ${d.label} DCA ${sign}${(d.excessPct * 100).toFixed(1)}%（跑赢占比 ${(d.winRatio * 100).toFixed(0)}%）`
+    );
+  }
+  const pending = v.counts["数据不足"] ?? 0;
+  if (pending > 0) lines.push(`_其余 ${pending} 个仍在攒数据_`);
+  return lines;
+}
