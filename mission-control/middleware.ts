@@ -7,10 +7,11 @@ const CRON_SECRET = process.env.CRON_SECRET;
 // 公开路由白名单：这些端点有各自独立的鉴权方式，或本就是公开信息，不走管理员 cookie / Bearer。
 // 除此之外，/api 下所有路由默认一律要求鉴权（default-deny，见下方 matcher）。
 const PUBLIC_API_PREFIXES = [
-  '/api/webhooks', // Shopify / Stripe / Telegram，各自做签名校验
-  '/api/inngest',  // Inngest 用自己的签名校验回调本端点
-  '/api/cron',     // 由各 cron 路由内部校验 CRON_SECRET
-  '/api/version',  // 公开的版本信息
+  '/api/webhooks',  // Shopify / Stripe / Telegram，各自做签名校验
+  '/api/inngest',   // Inngest 用自己的签名校验回调本端点
+  '/api/cron',      // 由各 cron 路由内部校验 CRON_SECRET
+  '/api/version',   // 公开的版本信息
+  '/api/blackball', // 黑球 worker 端点，内部校验 BLACKBALL_WORKER_TOKEN
 ];
 
 export function middleware(request: NextRequest) {
