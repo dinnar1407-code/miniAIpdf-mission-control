@@ -26,10 +26,14 @@ export async function POST(req: NextRequest) {
 
     const { taskId, status, runId, resultSummary, error } = body;
 
-    // 基本参数校验
-    if (!taskId || !status || !runId) {
+    // 基本参数校验：
+    // - taskId 和 status 始终必填
+    // - runId 在 status=failed 时允许为空字符串（黑球 submit 失败时没有 runId）
+    //   其他状态（succeeded 等）仍然要求 runId 非空
+    const requireRunId = status !== "failed";
+    if (!taskId || !status || (requireRunId && !runId)) {
       return NextResponse.json(
-        { ok: false, error: "taskId、status、runId 均为必填" },
+        { ok: false, error: "taskId 和 status 为必填；succeeded 时 runId 也必填" },
         { status: 400 }
       );
     }
@@ -48,14 +52,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 更新任务状态及结果字段
+    // blackballRunId：runId 为空字符串时（failed 状态下没有 runId）存 null
     await prisma.delegatedTask.update({
       where: { id: taskId },
       data: {
-        status: status as import("@prisma/client").DelegatedTaskStatus,
-        blackballRunId: runId,
-        resultSummary: resultSummary ?? null,
-        errorMessage: error ?? null,
-        completedAt: new Date(),
+        status:         status as import("@prisma/client").DelegatedTaskStatus,
+        blackballRunId: runId || null,
+        resultSummary:  resultSummary ?? null,
+        errorMessage:   error ?? null,
+        completedAt:    new Date(),
       },
     });
 
