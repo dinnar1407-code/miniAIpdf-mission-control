@@ -10,6 +10,7 @@ import { getAgentMemoryContext, extractAndSaveMemory } from "@/lib/ai/agent-memo
 import { publishToChannels } from "@/lib/channels/publisher";
 import { sendTelegram } from "@/lib/telegram";
 import { evaluateCondition } from "@/lib/safe-condition";
+import { isBlackballStep, isBlackballTaskSafe } from "@/lib/blackball-executor";
 
 // ==================== LOG HELPER ====================
 
@@ -46,6 +47,53 @@ async function executeStep(
     case "agent": {
       const agentId = step.agent || "playfish";
       const action  = step.action || "完成分配的任务";
+
+      // ── 黑球派发分支（Phase 3）─────────────────────────────────
+      // 如果这一步被指派给「黑球」虚拟执行器：
+      //   - 绝不调用 LLM、绝不 fetch 任何 URL（拉取模式，永不主动连黑球）。
+      //   - 只往 DelegatedTask 队列写一条 pending 任务，黑球 worker 自己轮询领取。
+      //   - 写入前做代码级安全闸：扫描任务文本里的危险操作关键词，命中则拒绝派发。
+      if (isBlackballStep(agentId)) {
+        // 安全闸：只产出文档的调研/写作任务才放行；命中发邮件/退款/发货/发布等危险词一律拒绝。
+        if (!isBlackballTaskSafe(action)) {
+          await addLog(
+            runId, index, step.type,
+            `✗ 拒绝派发给黑球：任务命中危险操作关键词（只允许调研/检索/写作/总结/分析等只产出文档的任务）`,
+            "error",
+          );
+          // 降级为失败，让上层（mission-orchestrator）按既有失败流程处理（不会自动重试到 LLM）
+          return {
+            success: false,
+            error: "Blackball dispatch rejected: task contains a dangerous/unsafe action",
+          };
+        }
+
+        await addLog(runId, index, step.type, `📦 派发给黑球（异步拉取执行）...`, "info");
+
+        try {
+          // step.planStepId 是发起这条步骤的 PlanStep 主键（mission-orchestrator 透传），
+          // 用于黑球结果回写时关联回 Plan；手动触发的 workflow 没有该字段时存 null。
+          const delegated = await prisma.delegatedTask.create({
+            data: {
+              title:      step.label || action.slice(0, 60),
+              prompt:     action,
+              planStepId: step.planStepId ?? null,
+              status:     "pending",
+            },
+            select: { id: true },
+          });
+          await addLog(
+            runId, index, step.type,
+            `✓ 已派发给黑球，异步执行中（task=${delegated.id}）`,
+            "success",
+          );
+          return { success: true, output: "已派发给黑球，异步执行中" };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          await addLog(runId, index, step.type, `✗ 黑球派发失败（DB 写入错误）: ${message}`, "error");
+          return { success: false, error: `Blackball dispatch failed: ${message}` };
+        }
+      }
 
       // Resolve DB primary key for AgentMemory FK (agentId above is the name/slug)
       const agentRecord = await prisma.agent.findFirst({

@@ -85,17 +85,29 @@ function normalizeReversibility(raw: unknown): Reversibility {
 }
 
 /**
+ * 扫描单段文本，命中任一危险操作关键词即返回 true。
+ * 全部转小写后做「子串包含」匹配（与 DANGEROUS_ACTION_KEYWORDS 注释里的策略一致）。
+ *
+ * 抽成导出函数是为了让黑球派发逻辑（lib/blackball-executor.ts）能复用同一套词表，
+ * 在真正写入 DelegatedTask 之前对单条任务文本做代码级安全检查，避免词表两处维护漂移。
+ */
+export function containsDangerousAction(text?: string | null): boolean {
+  const lower = (text ?? "").toLowerCase();
+  if (!lower) return false;
+  for (const kw of DANGEROUS_ACTION_KEYWORDS) {
+    if (lower.includes(kw)) return true;
+  }
+  return false;
+}
+
+/**
  * 扫描 plan steps 的 action 文本，命中任一危险关键词即返回 true。
  * 命中后调用方应强制 requireApproval=true。
  */
 function hasDangerousAction(steps?: PlanStepLike[]): boolean {
   if (!steps || steps.length === 0) return false;
   for (const step of steps) {
-    const action = (step.action ?? "").toLowerCase();
-    if (!action) continue;
-    for (const kw of DANGEROUS_ACTION_KEYWORDS) {
-      if (action.includes(kw)) return true;
-    }
+    if (containsDangerousAction(step.action)) return true;
   }
   return false;
 }

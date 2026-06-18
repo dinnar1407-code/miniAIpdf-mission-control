@@ -31,12 +31,15 @@ export async function createMissionFromPlan(planId: string): Promise<Mission> {
       );
     }
     return {
-      id:     crypto.randomUUID(),
-      type:   "agent" as const,
-      label:  s.action.slice(0, 60),
-      config: {},
-      agent:  s.agentId,
-      action: s.action,
+      id:         crypto.randomUUID(),
+      type:       "agent" as const,
+      label:      s.action.slice(0, 60),
+      config:     {},
+      agent:      s.agentId,
+      action:     s.action,
+      // 透传 PlanStep 主键：若该步骤被指派给黑球，workflow-engine 会把它写进
+      // DelegatedTask.planStepId，便于黑球结果回写时关联回原 Plan。
+      planStepId: s.id,
     };
   });
 

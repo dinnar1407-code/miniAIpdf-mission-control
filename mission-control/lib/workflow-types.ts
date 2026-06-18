@@ -13,6 +13,9 @@ export interface WorkflowStep {
   // agent step
   agent?: string;
   action?: string;
+  // 黑球派发用：发起本步骤的 PlanStep 主键（mission-orchestrator 透传）。
+  // 仅当本步骤来自 Plan 且指派给黑球时有意义；手动编辑器创建的 workflow 不设此字段。
+  planStepId?: string;
   // http step
   method?: string;
   url?: string;
