@@ -47,6 +47,7 @@ const zh = {
   navProjects:   '项目',
   navAgentStatus:'Agent 状态',
   navHome:       '首页',
+  navBlackball:  '黑球',
 
   // Login
   loginTitle:        'Mission Ctrl 登录',
@@ -567,6 +568,7 @@ const en: typeof zh = {
   navProjects:   'Projects',
   navAgentStatus:'Agent Status',
   navHome:       'Home',
+  navBlackball:  'Blackball',
 
   loginTitle:        'Mission Ctrl Login',
   loginButton:       'Login',
