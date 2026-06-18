@@ -7,6 +7,12 @@ import { llmCall }                        from "@/lib/llm";
 import { buildUserPrompt }                from "@/prompts/planner-user";
 import { PlanOutputSchema }               from "@/lib/planner-schema";
 import { needsApproval }                  from "@/lib/approval-policy";
+import {
+  BLACKBALL_AGENT_SLUG,
+  BLACKBALL_AGENT_DESCRIPTION,
+  isBlackballStep,
+  isBlackballAutoDispatchEnabled,
+} from "@/lib/blackball-executor";
 import { inngest }                        from "@/inngest/client";
 import { createMissionFromPlan }          from "@/lib/mission-orchestrator";
 import { sendTelegramWithButtons }        from "@/lib/telegram";
@@ -85,6 +91,18 @@ export async function planFromInsight(
     slug: a.name,
     role: a.type,
   }));
+
+  // 代码级注入「黑球」虚拟执行器（Phase 3）：
+  // 不往 DB 的 Agent 表写记录，而是在内存里把黑球作为一个可选 agent 暴露给 Planner，
+  // 这样无需跑 migration / seed 即可让规划模型把「调研/检索/写作/总结/分析」这类
+  // 只产出文档的步骤指派给黑球。它的真实执行发生在 workflow-engine（写 DelegatedTask
+  // 队列，黑球 worker 自己拉取），见 lib/blackball-executor.ts。
+  availableAgents.push({
+    id:   BLACKBALL_AGENT_SLUG,   // 虚拟 id，与 slug 一致；不对应真实 Agent.id
+    slug: BLACKBALL_AGENT_SLUG,
+    role: BLACKBALL_AGENT_DESCRIPTION,
+  });
+
   const validSlugs = new Set(availableAgents.map((a) => a.slug));
 
   // 8. Build user prompt
@@ -176,7 +194,7 @@ export async function planFromInsight(
   //     不再单纯信任 LLM 自报的 riskLevel/reversibility。
   //   - autoApproveThreshold 兜底默认从 1 改成 0：未显式配置 trust 阈值的项目
   //     默认「不自动批准」，把自动放行的决定权交还给项目显式配置。
-  const requireApproval = needsApproval(
+  let requireApproval = needsApproval(
     {
       riskLevel:     planOutput.riskLevel,
       reversibility: planOutput.reversibility as Reversibility,
@@ -185,6 +203,36 @@ export async function planFromInsight(
     insight.project?.autoApproveThreshold ?? 0,
     planOutput.steps,
   );
+
+  // ── 全自动派发开关（Phase 3，默认 OFF）─────────────────────────────────────
+  // 只有在「全自动总开关打开」且「整个计划是纯黑球的安全调研/写作计划」时，
+  // 才把上面 needsApproval 的判定从「需要审批」放宽为「自动批准」（绕过 Telegram）。
+  //
+  // 「纯黑球安全计划」的定义（必须全部满足，任一不满足都不放宽）：
+  //   a) 至少有一个步骤（空计划不放宽）；
+  //   b) 每一个步骤都指派给黑球（slug === 'blackball'）；
+  //   c) 没有任何步骤命中危险操作关键词（needsApproval 已经扫过；这里再判一次仅为
+  //      在「放宽」这条路径上把安全条件写显式，便于审计，不改变 needsApproval 自身行为）。
+  //
+  // 注意这是【单向放宽】：它只可能把 requireApproval 从 true 改成 false，
+  // 绝不会把本来不需要审批的计划改成需要审批。任何含危险/改代码步骤、或混入非黑球
+  // 步骤的计划，仍然按 needsApproval 的原判定走（默认=保持人工审批），逻辑完全不变。
+  if (
+    isBlackballAutoDispatchEnabled() &&
+    requireApproval &&
+    planOutput.steps.length > 0 &&
+    planOutput.steps.every((s) => isBlackballStep(s.agentId)) &&
+    !needsApproval(
+      // 用一个「绝对安全」的风险画像重判，只让 step.action 的危险关键词扫描起作用：
+      // riskLevel=0 + reversible + internal + autoApproveThreshold=0 时，
+      // needsApproval 返回 true 当且仅当某个 step.action 命中危险关键词。
+      { riskLevel: 0, reversibility: "reversible" as Reversibility, blastRadius: "internal" },
+      0,
+      planOutput.steps,
+    )
+  ) {
+    requireApproval = false;
+  }
 
   // 14. Atomic write
   const { plan, steps } = await prisma.$transaction(async (tx) => {
